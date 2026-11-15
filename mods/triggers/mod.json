@@ -1,1 +1,1 @@
-{ "place": "right", "size": 320, "title": "Triggers" }
+{ "place": "right", "size": 320, "title": "Triggers", "overlay": { "width": 360, "height": 600 } }

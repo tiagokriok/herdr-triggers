@@ -6,7 +6,7 @@ A side panel listing the local agent triggers of this machine (cron, once and we
 
 ## What you see
 
-Top to bottom, in a 320px column docked right (`mod.json`: `place: "right"`, `size: 320`), background `theme().surface`, text 12.5px `theme().foreground`:
+Top to bottom, in a 320px column docked right (`mod.json`: `place: "right"`, `size: 320`; opened with `mod.open`, a 360×600 floating panel: `overlay: {width: 360, height: 600}`), background `theme().surface`, text 12.5px `theme().foreground`:
 
 1. **Header**, 38px, bottom border `theme().border`: a 14px alarm-clock icon (`icon.svg`, tinted `muted`), "Triggers" in semibold, then on the right a 7px dot and "scheduler live" (dot `done`) or "scheduler stopped" (dot `dim`), in 11.5px `muted`. While stopped, a "Start" button follows.
 2. **Problem line** (only when there are tasks and something failed): 11.5px in `blocked`, e.g. a `tasks.json` validation error.

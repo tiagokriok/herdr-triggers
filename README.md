@@ -30,7 +30,10 @@ Desktop app panel (optional):
 ```sh
 cp -r mods/triggers ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/triggers
+herdr-app do mod.open '{"name":"triggers"}'   # toggle it as a floating panel
 ```
+
+To toggle it with a key, add `"ctrl-shift-y": "mod.open:triggers"` to `global` in `~/.config/herdr-app/keys.json`.
 
 `service install` writes a systemd user unit (`~/.config/systemd/user/herdr-triggers.service`, logs with `journalctl --user -u herdr-triggers`) or a launchd agent (`~/Library/LaunchAgents/dev.herdr.triggers.plist`). It copies your `PATH` and `CLAUDE_CONFIG_DIR` into it, so reinstall after changing them. `service restart` applies config changes; `service uninstall` removes it. It also writes `~/.config/herdr-triggers/cli.json`, which the panel reads to find the binary.
 
@@ -59,6 +62,8 @@ Log in to your agents once on the server (`claude`, `codex login`, ...) so a run
 Optional skill for agents (`/schedule-local`): `ln -sfn "$PWD/skills/schedule-local" ~/.claude/skills/schedule-local`.
 
 ## Use
+
+![TUI](docs/tui.png)
 
 ```sh
 herdr-triggers tui              # browse, add, edit, enable/disable, run now, delete
