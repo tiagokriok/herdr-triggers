@@ -17,18 +17,21 @@ A Grafana alert, a Linear issue or a cron line opens a new space (app) or worksp
 
 ## Install
 
-Requires Go 1.26+ and Herdr: the desktop app (`herdr-app`, `herdr-core`/`hc`) or the CLI (`herdr`), or both.
+Requires Herdr: the desktop app (`herdr-app`, `herdr-core`/`hc`) or the CLI (`herdr`), or both. Linux or macOS, amd64 or arm64.
 
 ```sh
-git clone https://github.com/tiagokriok/herdr-triggers && cd herdr-triggers
-go build -trimpath -ldflags="-s -w" -o ~/.local/bin/herdr-triggers ./cmd/herdr-triggers
+curl -fsSL https://raw.githubusercontent.com/tiagokriok/herdr-triggers/main/install.sh | sh
 herdr-triggers service install             # scheduler + webhooks + tunnel, started on login
 ```
+
+The script downloads the latest [release](https://github.com/tiagokriok/herdr-triggers/releases), checks its SHA-256, installs the binary to `~/.local/bin` (`BIN_DIR`) and the panel and skill to `~/.local/share/herdr-triggers` (`XDG_DATA_HOME`). `VERSION=v0.1.0` pins a release. Run it again to update, then `herdr-triggers service restart`.
+
+Or download an archive from the releases page, or build it with Go 1.26+: `go install github.com/tiagokriok/herdr-triggers/cmd/herdr-triggers@latest`.
 
 Desktop app panel (optional):
 
 ```sh
-cp -r mods/triggers ~/.config/herdr-app/mods/
+cp -r ~/.local/share/herdr-triggers/mods/triggers ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/triggers
 herdr-app do mod.open '{"name":"triggers"}'   # toggle it as a floating panel
 ```
@@ -50,7 +53,7 @@ Without the service, `herdr-triggers start` runs the scheduler in a "Triggers" s
 ### On a VPS or homelab
 
 ```sh
-go build -trimpath -ldflags="-s -w" -o ~/.local/bin/herdr-triggers ./cmd/herdr-triggers
+curl -fsSL https://raw.githubusercontent.com/tiagokriok/herdr-triggers/main/install.sh | sh
 herdr-triggers backend cli
 herdr-triggers public tailscale            # or ngrok <domain>, url <baseUrl>
 herdr-triggers service install
@@ -59,7 +62,7 @@ sudo loginctl enable-linger $USER          # keep user services running without 
 
 Log in to your agents once on the server (`claude`, `codex login`, ...) so a run never stops at a login screen.
 
-Optional skill for agents (`/schedule-local`): `ln -sfn "$PWD/skills/schedule-local" ~/.claude/skills/schedule-local`.
+Optional skill for agents (`/schedule-local`): `ln -sfn ~/.local/share/herdr-triggers/skills/schedule-local ~/.claude/skills/schedule-local`.
 
 ## Use
 
@@ -76,6 +79,7 @@ herdr-triggers backend [auto|app|cli] [session]
 herdr-triggers start | stop     # scheduler in an app space instead of a service
 herdr-triggers token            # a random webhook token
 herdr-triggers public [provider [x]]  # how webhooks reach you (see below)
+herdr-triggers version
 ```
 
 - Tasks: `~/.config/herdr-triggers/tasks.json` (format in `skills/schedule-local/SKILL.md`), re-read every 5 s. Edit it by hand, with the TUI, or let an agent use the skill.
@@ -125,7 +129,7 @@ Random URLs (ngrok without a domain, cloudflared) change on every scheduler rest
 
 ## Dev
 
-`go test -race ./...`, `go vet ./...`. Design notes: `docs/design.md`. Mod brief: `mods/triggers/RECIPE.md`.
+`go test -race ./...`, `go vet ./...`. Release: push a `v*` tag; GitHub Actions runs the tests and GoReleaser (`.goreleaser.yaml`) publishes the archives and `checksums.txt`. Design notes: `docs/design.md`. Mod brief: `mods/triggers/RECIPE.md`.
 
 ## License
 
