@@ -204,7 +204,7 @@ func run(args []string) error {
 		}
 		defer db.Close()
 		cfg, _ := config.Load(p.Config)
-		st := status{State: view.Scheduler(db, time.Now()), Mode: "space", Backend: cfg.ResolveBackend(exec.LookPath), Terminal: daemon.Status(d).Terminal}
+		st := status{State: view.Scheduler(db, view.IsScheduler), Mode: "space", Backend: cfg.ResolveBackend(exec.LookPath), Terminal: daemon.Status(d).Terminal}
 		if service.Installed(sd) {
 			st.Mode = "service"
 		}
@@ -342,13 +342,13 @@ func serve(a *app.App, p store.Paths) error {
 		<-sig
 		stop()
 		clearPublic(a)
-		view.Unbeat(a.DB)
+		view.MarkDown(a.DB)
 		os.Exit(0)
 	}()
 	a.Log("backend: " + a.Dispatch.Backend)
+	view.MarkUp(a.DB, os.Getpid())
 	var state schedule.State
 	for {
-		view.Beat(a.DB, time.Now())
 		next, _ := a.Step(state)
 		for id, s := range next {
 			if prev, ok := state[id]; !ok || !sameTime(prev.At, s.At) {

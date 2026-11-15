@@ -20,6 +20,8 @@ type App struct {
 	Dispatch dispatch.Deps
 	Log      func(string)
 	Notify   func(title, body string)
+	cache    *store.TaskCache
+	lastErr  string
 }
 
 var (
@@ -75,11 +77,18 @@ func (a *App) start(t task.Task) (store.Run, error) {
 }
 
 func (a *App) Step(prev schedule.State) (schedule.State, []<-chan store.Run) {
-	f, err := store.LoadTasks(a.Tasks)
+	if a.cache == nil || a.cache.File != a.Tasks {
+		a.cache = &store.TaskCache{File: a.Tasks}
+	}
+	f, err := a.cache.Load()
 	if err != nil {
-		a.Log("tasks.json invalid, keeping previous schedule: " + err.Error())
+		if err.Error() != a.lastErr {
+			a.Log("tasks.json invalid, keeping previous schedule: " + err.Error())
+			a.lastErr = err.Error()
+		}
 		return prev, nil
 	}
+	a.lastErr = ""
 	plan := schedule.Plan(f.Tasks, prev, a.Dispatch.Now())
 	for _, m := range plan.Missed {
 		a.Log(fmt.Sprintf("missed %s %s", m.Task.ID, stamp(m.At)))

@@ -145,3 +145,22 @@ func DeleteTask(file, id string) error {
 		return nil
 	})
 }
+
+type TaskCache struct {
+	File    string
+	stamp   string
+	content task.File
+	err     error
+}
+
+func (c *TaskCache) Load() (task.File, error) {
+	stamp := "missing"
+	if st, err := os.Stat(c.File); err == nil {
+		stamp = fmt.Sprintf("%d:%d", st.ModTime().UnixNano(), st.Size())
+	}
+	if stamp != c.stamp {
+		c.content, c.err = LoadTasks(c.File)
+		c.stamp = stamp
+	}
+	return c.content, c.err
+}

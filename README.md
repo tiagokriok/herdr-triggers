@@ -21,7 +21,7 @@ Requires Go 1.26+ and Herdr: the desktop app (`herdr-app`, `herdr-core`/`hc`) or
 
 ```sh
 git clone https://github.com/tiagokriok/herdr-triggers && cd herdr-triggers
-go build -o ~/.local/bin/herdr-triggers ./cmd/herdr-triggers
+go build -trimpath -ldflags="-s -w" -o ~/.local/bin/herdr-triggers ./cmd/herdr-triggers
 herdr-triggers service install             # scheduler + webhooks + tunnel, started on login
 ```
 
@@ -47,7 +47,7 @@ Without the service, `herdr-triggers start` runs the scheduler in a "Triggers" s
 ### On a VPS or homelab
 
 ```sh
-go build -o ~/.local/bin/herdr-triggers ./cmd/herdr-triggers
+go build -trimpath -ldflags="-s -w" -o ~/.local/bin/herdr-triggers ./cmd/herdr-triggers
 herdr-triggers backend cli
 herdr-triggers public tailscale            # or ngrok <domain>, url <baseUrl>
 herdr-triggers service install

@@ -91,20 +91,15 @@ type Listing struct {
 	Scheduler   string `json:"scheduler"`
 }
 
-const (
-	heartbeatKey   = "heartbeat"
-	heartbeatFresh = 20 * time.Second
-)
+const pidKey = "scheduler_pid"
 
-func Unbeat(db *store.DB) { db.SetMeta(heartbeatKey, "") }
+func MarkUp(db *store.DB, pid int) { db.SetMeta(pidKey, strconv.Itoa(pid)) }
 
-func Beat(db *store.DB, now time.Time) {
-	db.SetMeta(heartbeatKey, now.UTC().Format(time.RFC3339))
-}
+func MarkDown(db *store.DB) { db.SetMeta(pidKey, "") }
 
-func Scheduler(db *store.DB, now time.Time) string {
-	at, err := time.Parse(time.RFC3339, db.Meta(heartbeatKey))
-	if err != nil || now.Sub(at) > heartbeatFresh {
+func Scheduler(db *store.DB, alive func(int) bool) string {
+	pid, err := strconv.Atoi(db.Meta(pidKey))
+	if err != nil || !alive(pid) {
 		return "stopped"
 	}
 	return "live"
@@ -131,7 +126,7 @@ func List(tasksFile string, db *store.DB, now time.Time) Listing {
 	if err != nil {
 		return Listing{Tasks: []Task{}, Error: err.Error()}
 	}
-	out := Listing{Tasks: []Task{}, PublicURL: db.Meta(PublicURLKey), PublicError: db.Meta(PublicErrorKey), Scheduler: Scheduler(db, now)}
+	out := Listing{Tasks: []Task{}, PublicURL: db.Meta(PublicURLKey), PublicError: db.Meta(PublicErrorKey), Scheduler: Scheduler(db, IsScheduler)}
 	for _, t := range f.Tasks {
 		v := Task{ID: t.ID, Title: t.Title, Schedule: Describe(t.Schedule), Enabled: t.Enabled, Agent: t.Agent, Model: t.Model}
 		if t.Enabled {

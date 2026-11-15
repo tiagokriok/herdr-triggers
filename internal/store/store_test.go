@@ -173,3 +173,30 @@ func TestMeta(t *testing.T) {
 		t.Fatal(v)
 	}
 }
+
+func TestTaskCache(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "tasks.json")
+	c := &TaskCache{File: file}
+	if f, err := c.Load(); err != nil || len(f.Tasks) != 0 {
+		t.Fatal(f, err)
+	}
+	one := `{"tasks":[{"id":"a","title":"A","prompt":"p","cwd":"/tmp","schedule":{"type":"cron","expr":"0 9 * * *"},"enabled":true}]}`
+	os.WriteFile(file, []byte(one), 0o644)
+	if f, err := c.Load(); err != nil || len(f.Tasks) != 1 {
+		t.Fatal(f, err)
+	}
+	st, _ := os.Stat(file)
+	os.WriteFile(file, []byte(strings.Replace(one, `true`, `ttue`, 1)), 0o644)
+	os.Chtimes(file, st.ModTime(), st.ModTime())
+	if f, err := c.Load(); err != nil || f.Tasks[0].Title != "A" {
+		t.Fatal("re-read an unchanged file", f, err)
+	}
+	os.Chtimes(file, st.ModTime().Add(time.Second), st.ModTime().Add(time.Second))
+	if _, err := c.Load(); err == nil {
+		t.Fatal("changed file not re-read")
+	}
+	os.Remove(file)
+	if f, err := c.Load(); err != nil || len(f.Tasks) != 0 {
+		t.Fatal("removed file", f, err)
+	}
+}

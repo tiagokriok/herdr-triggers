@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -70,15 +71,27 @@ func TestHookURL(t *testing.T) {
 func TestScheduler(t *testing.T) {
 	db, _ := store.Open(filepath.Join(t.TempDir(), "state.db"))
 	defer db.Close()
-	now := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
-	if Scheduler(db, now) != "stopped" {
-		t.Fatal("no heartbeat")
+	alive := func(pids ...int) func(int) bool {
+		return func(p int) bool { return slices.Contains(pids, p) }
 	}
-	Beat(db, now.Add(-10*time.Second))
-	if Scheduler(db, now) != "live" {
-		t.Fatal("fresh")
+	if Scheduler(db, alive(42)) != "stopped" {
+		t.Fatal("no pid recorded")
 	}
-	if Scheduler(db, now.Add(time.Minute)) != "stopped" {
-		t.Fatal("stale")
+	MarkUp(db, 42)
+	if Scheduler(db, alive(42)) != "live" {
+		t.Fatal("running")
+	}
+	if Scheduler(db, alive()) != "stopped" {
+		t.Fatal("crashed")
+	}
+	MarkDown(db)
+	if Scheduler(db, alive(42)) != "stopped" {
+		t.Fatal("clean exit")
+	}
+}
+
+func TestProcessAlive(t *testing.T) {
+	if !ProcessAlive(os.Getpid()) || ProcessAlive(0) || ProcessAlive(1<<30) {
+		t.Fatal("ProcessAlive")
 	}
 }
