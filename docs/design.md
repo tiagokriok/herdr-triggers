@@ -1,10 +1,15 @@
-# automations design
+# herdr-triggers design
 
-- **Scheduler**: `bun src/scheduler.ts` runs in an app space made by `herdr-app do space.new` (`bin/start`). App terminals are core-kept (`keep: true`). `bin/start` remembers `{space, terminal}` in the state dir and does nothing while that terminal still runs the scheduler; otherwise it closes the old space and opens a new one.
-- **Tick** (5s): re-read `tasks.json`, `planTick` decides fire/missed. Cron is 5 fields, local time (croner). Runs late by at most `catchUpMinutes` (default 120, min 60s) fire, so a run due during sleep fires on wake; older ones are logged `missed` and skipped. A missed `once` task gets a `missed` run and is disabled.
-- **Dispatch**: reserve run `n` in `runs.json` (lockfile, atomic writes), disable `once` tasks, then `herdr-app do space.new {name, folder, argv, task: prompt}`. `agents.ts` builds argv per agent: model flag, `agentArgs`, prompt separator (`--`, or `--prompt` for opencode); `CLAUDE_CONFIG_DIR` only for claude. `timeoutMinutes` sets `timeoutAt`; a check-in past it runs `hc kill` and records `timeout`.
-- **Alerts**: `failed`/`blocked`/`timeout`/`missed` call `notify` (notify-send, osascript on macOS). Track with `hc wait --timeout 30`; on each check-in, `blocked` comes from the agent status, or a confirm prompt in the screen's last lines while the agent isn't working.
-- **Overlap**: a fire is skipped while the task's last run is starting/working/blocked.
-- **Restart**: on start, active runs whose terminal is gone become `exit`; live ones are watched again.
+One Go binary, `cmd/herdr-triggers`. Packages in `internal/`:
+
+- **task**: `tasks.json` schema and validation (unknown fields rejected, defaults `agent: claude`, `catchUpMinutes: 120`). Cron validated by gronx, exactly 5 fields.
+- **schedule**: `Next` (cron in local time, once, webhook never) and `Plan` (tick: fire, missed, armed state). A run late by at most `max(60s, catchUpMinutes)` fires, so a run due during sleep fires on wake; older ones are `missed`. A once task already past when first seen fires within that window, else is `missed`.
+- **agents**: argv per agent: model flag (`--model`, `-m` for codex), `agentArgs`, prompt separator (`--`, `--prompt` for opencode, nothing for unknown binaries). `CLAUDE_CONFIG_DIR` via `env` for claude only.
+- **store**: paths (XDG), `tasks.json` edits under `flock` with atomic writes, SQLite `state.db` (modernc, WAL, busy timeout, immediate transactions) for `runs` and `deliveries`. `Reserve` assigns run `n` per task in one transaction.
+- **dispatch**: `herdr-app do space.new {name, folder, argv, task}`, then `hc wait --timeout 30` loop. `message` and `timeout` reasons are check-ins; `idle` at turn 0 is startup, not the end (pause 2 s). On check-ins: `timeoutAt` passed → `hc kill`, `timeout`; `blocked` from the agent status or a confirm prompt in the screen's last 5 lines while not working.
+- **app**: `Step` (tick), `Reconcile` (active runs: gone terminal → `exit`, live → watched again), `Begin`/`RunNow` (overlap guard, reserve, disable once tasks, payload framing). Alerts on `failed`/`blocked`/`timeout`/`error`/`missed`.
+- **webhook**: `POST /hooks/{id}`, token from Bearer, `X-Triggers-Token` or `?token=`, compared in constant time. Body ≤ 64 KB. Each delivery logged with its outcome (`accepted`, `unauthorized`, `too_large`, `busy`).
+- **daemon**: `start` writes `cli.json`, reuses the remembered `{space, terminal}` while it runs `herdr-triggers serve`, else closes it and opens a "Triggers" space. `stop`, `status`.
+- **view**: `list --json` for the mod and the TUI. **tui**: Bubble Tea + Huh.
 - Never write app layout files or `herdr.space`/`herdr.tab` labels; only documented `herdr-app do` commands and `hc`.
-- **Mod**: `mods/automations` reads `~/.config/automations/cli.json` (written by `start`) and polls `list --json` / `status --json` every 10s; actions call `run-now --bg`, `enable`, `disable`, `start`. See its `RECIPE.md`.
+- **Mod**: `mods/triggers` reads `~/.config/herdr-triggers/cli.json` and polls `list --json` / `status --json` every 10 s; actions call `run-now --bg`, `enable`, `disable`, `start`. See its `RECIPE.md`.

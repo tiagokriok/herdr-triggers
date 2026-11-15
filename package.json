@@ -1,6 +1,0 @@
-{
-  "name": "herdr-automations",
-  "private": true,
-  "workspaces": ["plugins/*"],
-  "scripts": { "test": "bun test", "typecheck": "bun run --filter '*' typecheck" }
-}

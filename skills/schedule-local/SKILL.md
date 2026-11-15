@@ -5,12 +5,12 @@ description: Use when the user wants to schedule, list, pause, resume, remove or
 
 # schedule-local
 
-Local scheduled automations run by the `automations` scheduler inside the Herdr desktop app. Each run opens a new app space named `<title> run <n>` with the agent in the task's `cwd`, and the prompt as its first message.
+Local automations run by `herdr-triggers` inside the Herdr desktop app, on cron, once or webhook triggers. Each run opens a new app space named `<title> run <n>` with the agent in the task's `cwd`, and the prompt as its first message.
 
 ## Files
-- Tasks: `${XDG_CONFIG_HOME:-~/.config}/automations/tasks.json` (re-read every 5s)
-- Runs: `${XDG_STATE_HOME:-~/.local/state}/automations/runs.json` (read-only for you)
-- Plugin dir: `<repo>/plugins/automations` (`<repo>` = where herdr-automations is cloned; resolve it via the symlink of this skill)
+- Tasks: `${XDG_CONFIG_HOME:-~/.config}/herdr-triggers/tasks.json` (re-read every 5s)
+- Runs and webhook deliveries: `${XDG_STATE_HOME:-~/.local/state}/herdr-triggers/state.db` (SQLite; read them with `herdr-triggers list --json` or the TUI)
+- Binary: `herdr-triggers` (on PATH, usually `~/.local/bin`)
 
 ## tasks.json shape
 ```json
@@ -25,23 +25,25 @@ Local scheduled automations run by the `automations` scheduler inside the Herdr 
 } ] }
 ```
 - `id`: `^[a-z0-9][a-z0-9-]*$`, unique. `cwd`: absolute path.
-- `schedule`: `{ "type": "cron", "expr": "<exactly 5 fields, local time>" }` or `{ "type": "once", "runAt": "<ISO with offset, e.g. 2026-11-15T09:00:00-03:00>" }`.
+- `schedule`: `{ "type": "cron", "expr": "<exactly 5 fields, local time>" }` or `{ "type": "once", "runAt": "<ISO with offset, e.g. 2026-11-15T09:00:00-03:00>" }` or `{ "type": "webhook", "token": "<herdr-triggers token>" }` (fires on `POST http://127.0.0.1:8787/hooks/<id>` with `Authorization: Bearer <token>`; the body is appended to the prompt as untrusted data).
+- Unknown fields are rejected.
 - `agent` optional, default `claude`. Known: `claude`, `codex`, `pi`, `opencode`; any other binary gets `--model <m>` and the prompt as last argument. `once` tasks auto-disable after firing.
 - `model` optional: passed as the agent's model flag (`--model`, `-m` for codex).
 - `agentArgs` optional: extra flags, verbatim, before the prompt.
 - `timeoutMinutes` optional: past it the run is killed and recorded `timeout`.
 - `catchUpMinutes` optional, default 120: a run due while the machine slept fires on wake if at most this late; later ones are `missed`. `0` = only within 60s.
-- `claudeConfigDir` optional, claude only: used when the scheduler has no `CLAUDE_CONFIG_DIR` in its env (`bin/start` forwards the caller's).
+- `claudeConfigDir` optional, claude only: used when the scheduler has no `CLAUDE_CONFIG_DIR` in its env (`herdr-triggers start` forwards the caller's).
 - A missed `once` task gets a `missed` run and is disabled.
 - Failed, blocked, timed-out and missed runs raise a desktop notification (`notify-send` / macOS `osascript`).
 - A task never overlaps itself: a fire is skipped while its previous run is still working/blocked.
-- Run status in runs.json: `starting`, `working`, `blocked` (agent waits for input or a confirm prompt is on screen), `done`, `error`, `exit`, `missed`, `failed`, `timeout`.
+- Run status: `starting`, `working`, `blocked` (agent waits for input or a confirm prompt is on screen), `done`, `error`, `exit`, `missed`, `failed`, `timeout`.
 
 ## Flow
 1. Ask only what is missing: what to do (prompt), where (cwd, absolute), when. Derive `id`/`title`.
 2. Read the file (create `{ "tasks": [] }` if missing). Edit with minimal JSON changes; never touch other tasks.
    - pause/resume: flip `enabled`. remove: delete the entry.
-3. Validate and show next fire times: `cd <repo>/plugins/automations && bun src/cli.ts list`.
-   It fails loudly on invalid JSON/cron. Confirm next times with the user.
-4. Make sure the scheduler runs: `bin/start` (idempotent; needs the Herdr app open).
-5. Run now: `bun src/cli.ts run-now <id>` (blocks until the run ends; Ctrl-C is safe, the scheduler picks the run up again on restart).
+3. Validate and show next fire times: `herdr-triggers list`.
+   It fails loudly on invalid JSON/cron. Confirm next times with the user. For a webhook, generate the token with `herdr-triggers token` and give the user the URL and token.
+4. Make sure the scheduler runs: `herdr-triggers start` (idempotent; needs the Herdr app open).
+5. Run now: `herdr-triggers run-now <id> --bg`. pause/resume also: `herdr-triggers disable|enable <id>`.
+6. The user can also do all of this in `herdr-triggers tui`.
