@@ -28,6 +28,9 @@ func fail(w http.ResponseWriter, code int, msg string) {
 }
 
 func tokenOf(r *http.Request) string {
+	if t := r.PathValue("token"); t != "" {
+		return t
+	}
 	if auth, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
 		return strings.TrimSpace(auth)
 	}
@@ -53,7 +56,7 @@ func findHook(tasks []task.Task, id string) (task.Task, bool) {
 
 func Handler(a *app.App, spawn func(func())) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/hooks/{id}", func(w http.ResponseWriter, r *http.Request) {
+	handle := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
 			fail(w, http.StatusMethodNotAllowed, "POST only")
@@ -103,6 +106,8 @@ func Handler(a *app.App, spawn func(func())) http.Handler {
 		record(len(body), "accepted", run.N)
 		spawn(func() { start() })
 		reply(w, http.StatusAccepted, map[string]any{"task": id, "run": run.N})
-	})
+	}
+	mux.HandleFunc("/hooks/{id}", handle)
+	mux.HandleFunc("/hooks/{id}/{token}", handle)
 	return mux
 }

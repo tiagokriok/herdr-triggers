@@ -25,7 +25,7 @@ Local automations run by `herdr-triggers` inside the Herdr desktop app, on cron,
 } ] }
 ```
 - `id`: `^[a-z0-9][a-z0-9-]*$`, unique. `cwd`: absolute path.
-- `schedule`: `{ "type": "cron", "expr": "<exactly 5 fields, local time>" }` or `{ "type": "once", "runAt": "<ISO with offset, e.g. 2026-11-15T09:00:00-03:00>" }` or `{ "type": "webhook", "token": "<herdr-triggers token>" }` (fires on `POST http://127.0.0.1:8787/hooks/<id>` with `Authorization: Bearer <token>`; the body is appended to the prompt as untrusted data).
+- `schedule`: `{ "type": "cron", "expr": "<exactly 5 fields, local time>" }` or `{ "type": "once", "runAt": "<ISO with offset, e.g. 2026-11-15T09:00:00-03:00>" }` or `{ "type": "webhook", "token": "<herdr-triggers token>" }` (fires on `POST <public url>/hooks/<id>/<token>`; `herdr-triggers public` shows the URL; the body is appended to the prompt as untrusted data).
 - Unknown fields are rejected.
 - `agent` optional, default `claude`. Known: `claude`, `codex`, `pi`, `opencode`; any other binary gets `--model <m>` and the prompt as last argument. `once` tasks auto-disable after firing.
 - `model` optional: passed as the agent's model flag (`--model`, `-m` for codex).
@@ -43,7 +43,7 @@ Local automations run by `herdr-triggers` inside the Herdr desktop app, on cron,
 2. Read the file (create `{ "tasks": [] }` if missing). Edit with minimal JSON changes; never touch other tasks.
    - pause/resume: flip `enabled`. remove: delete the entry.
 3. Validate and show next fire times: `herdr-triggers list`.
-   It fails loudly on invalid JSON/cron. Confirm next times with the user. For a webhook, generate the token with `herdr-triggers token` and give the user the URL and token.
+   It fails loudly on invalid JSON/cron. Confirm next times with the user. For a webhook, generate the token with `herdr-triggers token` and give the user the full URL. If `public` says provider `none`, ask which tunnel they want (`herdr-triggers public tailscale|ngrok [domain]|cloudflared|url <baseUrl>`), then restart with `herdr-triggers stop && herdr-triggers start`.
 4. Make sure the scheduler runs: `herdr-triggers start` (idempotent; needs the Herdr app open).
 5. Run now: `herdr-triggers run-now <id> --bg`. pause/resume also: `herdr-triggers disable|enable <id>`.
 6. The user can also do all of this in `herdr-triggers tui`.

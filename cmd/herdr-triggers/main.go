@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/tiagokriok/herdr-triggers/internal/schedule"
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/tui"
+	"github.com/tiagokriok/herdr-triggers/internal/tunnel"
 	"github.com/tiagokriok/herdr-triggers/internal/view"
 	"github.com/tiagokriok/herdr-triggers/internal/webhook"
 )
@@ -32,6 +34,9 @@ const usage = `herdr-triggers: scheduled and webhook-triggered agent runs for th
   start | stop           open or close the scheduler space in the app
   serve                  the scheduler itself (what start runs)
   token                  print a new random webhook token
+  public                 show how webhooks are exposed and the public url
+  public <provider> [x]  none | url <baseUrl> | tailscale | ngrok [domain] | cloudflared
+                         (restart the scheduler with stop + start to apply)
 `
 
 const tick = 5 * time.Second
@@ -82,6 +87,23 @@ func run(args []string) error {
 		b := make([]byte, 24)
 		rand.Read(b)
 		fmt.Println(hex.EncodeToString(b))
+		return nil
+	case "public":
+		if len(rest) == 0 {
+			break
+		}
+		c := tunnel.Config{Provider: rest[0]}
+		if len(rest) > 1 {
+			if c.Provider == "url" {
+				c.BaseURL = rest[1]
+			} else {
+				c.Domain = rest[1]
+			}
+		}
+		if err := tunnel.Save(p.Config, c); err != nil {
+			return err
+		}
+		fmt.Println("saved; apply with: herdr-triggers stop && herdr-triggers start")
 		return nil
 	case "enable", "disable":
 		id, err := idArg(rest)
@@ -164,6 +186,20 @@ func run(args []string) error {
 			fmt.Printf("%-20s %-3s %-28s next %-16s %s\n", t.ID, state, t.Schedule, next, t.Agent)
 		}
 		return nil
+	case "public":
+		c, err := tunnel.Load(p.Config)
+		if err != nil {
+			return err
+		}
+		l := view.List(p.Tasks, a.DB, time.Now())
+		fmt.Printf("provider %s %s%s\n", c.Provider, c.BaseURL, c.Domain)
+		if l.PublicURL != "" {
+			fmt.Println("url", l.PublicURL)
+		}
+		if l.PublicError != "" {
+			fmt.Println("error", l.PublicError)
+		}
+		return nil
 	case "run-now":
 		id, err := idArg(rest)
 		if err != nil {
@@ -176,22 +212,56 @@ func run(args []string) error {
 		fmt.Printf("%s #%d %s\n", r.TaskID, r.N, r.Status)
 		return nil
 	case "serve":
-		return serve(a)
+		return serve(a, p)
 	case "tui":
 		return tui.Run(p, a)
 	}
 	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 }
 
-func serve(a *app.App) error {
+func clearPublic(a *app.App) {
+	a.DB.SetMeta(view.PublicURLKey, "")
+	a.DB.SetMeta(view.PublicErrorKey, "")
+}
+
+func expose(a *app.App, p store.Paths) func() {
+	clearPublic(a)
+	addr := runtime.Addr()
+	cfg, err := tunnel.Load(p.Config)
+	if err == nil {
+		var url string
+		var stop func()
+		url, stop, err = tunnel.Open(cfg, addr, runtime.Start, 45*time.Second)
+		if err == nil {
+			a.DB.SetMeta(view.PublicURLKey, url)
+			a.Log("webhooks on " + view.HookURL(url, "<id>", "<token>"))
+			return stop
+		}
+	}
+	a.Log("public url: " + err.Error())
+	a.Notify("Triggers: public url failed", err.Error())
+	a.DB.SetMeta(view.PublicURLKey, "http://"+addr)
+	a.DB.SetMeta(view.PublicErrorKey, err.Error())
+	return func() {}
+}
+
+func serve(a *app.App, p store.Paths) error {
 	a.Log("scheduler up, tasks: " + a.Tasks)
 	a.Reconcile()
 	srv := &http.Server{Addr: runtime.Addr(), Handler: webhook.Handler(a, func(f func()) { go f() }), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
-		a.Log("webhooks on http://" + srv.Addr + "/hooks/<id>")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			a.Log("webhook server: " + err.Error())
 		}
+	}()
+	stop := expose(a, p)
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	go func() {
+		<-sig
+		stop()
+		clearPublic(a)
+		os.Exit(0)
 	}()
 	var state schedule.State
 	for {

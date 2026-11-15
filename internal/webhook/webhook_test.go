@@ -99,6 +99,10 @@ func TestTokenPlaces(t *testing.T) {
 		t.Fatal(r.Code)
 	}
 	e.wg.Wait()
+	if r := e.do("POST", "/hooks/alert/"+token, "", nil); r.Code != 202 {
+		t.Fatal(r.Code)
+	}
+	e.wg.Wait()
 }
 
 func TestRejections(t *testing.T) {
@@ -110,6 +114,7 @@ func TestRejections(t *testing.T) {
 	}{
 		{"wrong token", "POST", "/hooks/alert", "", map[string]string{"Authorization": "Bearer nope"}, 401},
 		{"no token", "POST", "/hooks/alert", "", nil, 401},
+		{"wrong path token", "POST", "/hooks/alert/nope", "", bearer, 401},
 		{"unknown", "POST", "/hooks/nope", "", bearer, 404},
 		{"disabled", "POST", "/hooks/off", "", bearer, 404},
 		{"not webhook", "POST", "/hooks/cron", "", bearer, 404},
@@ -128,7 +133,7 @@ func TestRejections(t *testing.T) {
 		t.Fatal(e.prompts)
 	}
 	ds, _ := e.db.Deliveries("alert", 10)
-	if len(ds) != 3 || ds[0].Outcome != "too_large" || ds[2].Outcome != "unauthorized" {
+	if len(ds) != 4 || ds[0].Outcome != "too_large" || ds[3].Outcome != "unauthorized" {
 		t.Fatalf("%+v", ds)
 	}
 }

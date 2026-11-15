@@ -62,6 +62,10 @@ CREATE TABLE IF NOT EXISTS deliveries (
   outcome TEXT NOT NULL,
   run_n INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_deliveries_task ON deliveries(task_id, received_at);
 `
 
@@ -186,4 +190,19 @@ func (d *DB) Deliveries(taskID string, limit int) ([]Delivery, error) {
 		out = append(out, x)
 	}
 	return out, rows.Err()
+}
+
+func (d *DB) SetMeta(key, value string) error {
+	if value == "" {
+		_, err := d.sql.Exec(`DELETE FROM meta WHERE key = ?`, key)
+		return err
+	}
+	_, err := d.sql.Exec(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+func (d *DB) Meta(key string) string {
+	var v string
+	d.sql.QueryRow(`SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
+	return v
 }

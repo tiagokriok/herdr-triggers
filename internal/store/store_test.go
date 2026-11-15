@@ -13,7 +13,7 @@ import (
 func TestPaths(t *testing.T) {
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	p, err := ResolvePaths(env(map[string]string{"XDG_CONFIG_HOME": "/c", "XDG_STATE_HOME": "/s", "HOME": "/h"}))
-	if err != nil || p != (Paths{Tasks: "/c/herdr-triggers/tasks.json", CLI: "/c/herdr-triggers/cli.json", DB: "/s/herdr-triggers/state.db", Scheduler: "/s/herdr-triggers/scheduler.json"}) {
+	if err != nil || p != (Paths{Tasks: "/c/herdr-triggers/tasks.json", CLI: "/c/herdr-triggers/cli.json", Config: "/c/herdr-triggers/config.json", DB: "/s/herdr-triggers/state.db", Scheduler: "/s/herdr-triggers/scheduler.json"}) {
 		t.Fatal(p, err)
 	}
 	p, _ = ResolvePaths(env(map[string]string{"HOME": "/h"}))
@@ -154,5 +154,22 @@ func TestDeliveries(t *testing.T) {
 	got, _ := db.Deliveries("a", 5)
 	if len(got) != 1 || got[0].Outcome != "accepted" || got[0].RunN != 3 {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestMeta(t *testing.T) {
+	db, _ := Open(filepath.Join(t.TempDir(), "state.db"))
+	defer db.Close()
+	if v := db.Meta("public_url"); v != "" {
+		t.Fatal(v)
+	}
+	db.SetMeta("public_url", "https://a")
+	db.SetMeta("public_url", "https://b")
+	if v := db.Meta("public_url"); v != "https://b" {
+		t.Fatal(v)
+	}
+	db.SetMeta("public_url", "")
+	if v := db.Meta("public_url"); v != "" {
+		t.Fatal(v)
 	}
 }

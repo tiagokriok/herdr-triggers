@@ -6,7 +6,7 @@ A Grafana alert, a ClickUp task or a cron line opens a new app space with Claude
 
 ![Triggers panel](mods/triggers/preview.png)
 
-- **Triggers**: 5-field cron (local time, `L`/`W`/`#` supported), once at a date, or a webhook (`POST /hooks/<id>` with a per-task token).
+- **Triggers**: 5-field cron (local time, `L`/`W`/`#` supported), once at a date, or a webhook with a per-task token and a public URL (Tailscale Funnel, ngrok, Cloudflare Tunnel or your own).
 - **Any agent**: `claude`, `codex`, `pi`, `opencode` know their model flag and prompt argument; any other binary gets `--model <m>` and the prompt last. Per task `model`, `agentArgs`, `timeoutMinutes`.
 - **Survives sleep**: a run due while the machine slept fires on wake within `catchUpMinutes` (default 120); older ones are recorded `missed`.
 - **Never overlaps itself**: a fire or webhook is refused while the task's previous run is still working or blocked.
@@ -40,9 +40,11 @@ herdr-triggers run-now <id> [--bg]
 herdr-triggers enable <id> | disable <id>
 herdr-triggers status [--json] | start | stop
 herdr-triggers token            # a random webhook token
+herdr-triggers public [provider [x]]  # how webhooks reach you (see below)
 ```
 
 - Tasks: `~/.config/herdr-triggers/tasks.json` (format in `skills/schedule-local/SKILL.md`), re-read every 5 s. Edit it by hand, with the TUI, or let an agent use the skill.
+- Public URL config: `~/.config/herdr-triggers/config.json`.
 - State: `~/.local/state/herdr-triggers/state.db` (SQLite: runs and webhook deliveries).
 - Env: `TRIGGERS_ADDR` (default `127.0.0.1:8787`), `TRIGGERS_HC`, `TRIGGERS_APP`, `CLAUDE_CONFIG_DIR` (forwarded to claude runs).
 
@@ -55,18 +57,30 @@ herdr-triggers token            # a random webhook token
 ```
 
 ```sh
-curl -X POST http://127.0.0.1:8787/hooks/grafana-alert -H "Authorization: Bearer <token>" -d '{"alert":"cpu"}'
+curl -X POST https://<public url>/hooks/grafana-alert/<token> -d '{"alert":"cpu"}'
 ```
 
-The token may also go in `X-Triggers-Token` or `?token=` (for senders that only take a URL). Replies: `202 {"task","run"}`, `401` bad token, `404` no enabled webhook task, `409` previous run still active, `413` body over 64 KB.
+The token can be the last path segment (one URL to paste in Grafana, ClickUp, GitHub), or go in `Authorization: Bearer`, `X-Triggers-Token` or `?token=`. Replies: `202 {"task","run"}`, `401` bad token, `404` no enabled webhook task, `409` previous run still active, `413` body over 64 KB. In the TUI, `c` copies a task's full URL.
 
-The server listens on localhost only. To receive webhooks from outside, put it behind [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) (`tailscale funnel 8787`) or another tunnel, and use the public URL in Grafana, ClickUp, GitHub, etc.
+#### Public URL
+
+The server listens on `127.0.0.1:8787`. Choose how it is reached from outside with `herdr-triggers public <provider>` or `p` in the TUI, then restart the scheduler (`s` in the TUI, or `stop` + `start`). The scheduler runs the tunnel itself and stops it on exit.
+
+| provider | runs | URL |
+|---|---|---|
+| `none` (default) | nothing | `http://127.0.0.1:8787` |
+| `tailscale` | `tailscale funnel 8787` (enable Funnel on your tailnet first) | `https://<machine>.<tailnet>.ts.net` |
+| `ngrok [domain]` | `ngrok http` (with `--url` for a reserved domain) | random, or your domain |
+| `cloudflared` | quick tunnel | random `*.trycloudflare.com` |
+| `url <baseUrl>` | nothing: you run the tunnel or proxy (named Cloudflare Tunnel, nginx, ...) | `<baseUrl>` |
+
+Random URLs (ngrok without a domain, cloudflared) change on every scheduler restart; use `tailscale`, an ngrok domain or `url` for senders you configure once. `herdr-triggers public` prints the current URL or why the tunnel failed.
 
 ### What this does on your machine
 
 - The scheduler runs in a Herdr app space and runs `herdr-app`, `hc`, each task's agent, and `notify-send` (`osascript` on macOS) for alerts.
 - It writes `~/.config/herdr-triggers/` (only when you or the TUI change tasks, and `cli.json` on `start`) and `~/.local/state/herdr-triggers/`.
-- It opens one HTTP port, on `127.0.0.1` only.
+- It opens one HTTP port, on `127.0.0.1` only, and, if you choose a provider, starts `tailscale funnel`, `ngrok` or `cloudflared` to expose it.
 - The **mod runs programs** with `exec`: the `herdr-triggers` binary named in `~/.config/herdr-triggers/cli.json`, which it reads from outside its own folder. It changes `tasks.json` only when you press Enable/Disable. It does not use the network.
 
 ## Similar projects

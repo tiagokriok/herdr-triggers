@@ -10,6 +10,7 @@ const appDir = "herdr-triggers"
 type Paths struct {
 	Tasks     string
 	CLI       string
+	Config    string
 	DB        string
 	Scheduler string
 }
@@ -29,6 +30,7 @@ func ResolvePaths(getenv func(string) string) (Paths, error) {
 	return Paths{
 		Tasks:     filepath.Join(config, appDir, "tasks.json"),
 		CLI:       filepath.Join(config, appDir, "cli.json"),
+		Config:    filepath.Join(config, appDir, "config.json"),
 		DB:        filepath.Join(state, appDir, "state.db"),
 		Scheduler: filepath.Join(state, appDir, "scheduler.json"),
 	}, nil

@@ -84,8 +84,19 @@ type Task struct {
 }
 
 type Listing struct {
-	Tasks []Task `json:"tasks"`
-	Error string `json:"error,omitempty"`
+	Tasks       []Task `json:"tasks"`
+	Error       string `json:"error,omitempty"`
+	PublicURL   string `json:"publicUrl,omitempty"`
+	PublicError string `json:"publicError,omitempty"`
+}
+
+const (
+	PublicURLKey   = "public_url"
+	PublicErrorKey = "public_error"
+)
+
+func HookURL(base, id, token string) string {
+	return base + "/hooks/" + id + "/" + token
 }
 
 func orNil(s string) *string {
@@ -100,7 +111,7 @@ func List(tasksFile string, db *store.DB, now time.Time) Listing {
 	if err != nil {
 		return Listing{Tasks: []Task{}, Error: err.Error()}
 	}
-	out := Listing{Tasks: []Task{}}
+	out := Listing{Tasks: []Task{}, PublicURL: db.Meta(PublicURLKey), PublicError: db.Meta(PublicErrorKey)}
 	for _, t := range f.Tasks {
 		v := Task{ID: t.ID, Title: t.Title, Schedule: Describe(t.Schedule), Enabled: t.Enabled, Agent: t.Agent, Model: t.Model}
 		if t.Enabled {
