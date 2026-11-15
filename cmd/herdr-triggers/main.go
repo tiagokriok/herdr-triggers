@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -44,6 +45,7 @@ const usage = `herdr-triggers: scheduled and webhook-triggered agent runs for th
   backend [auto|app|cli] [session]
                          where runs open: the Herdr app, or the herdr CLI server
                          (auto: the app when installed); restart to apply
+  version                print the version
 `
 
 const tick = 5 * time.Second
@@ -82,6 +84,11 @@ func idArg(args []string) (string, error) {
 func run(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		fmt.Print(usage)
+		return nil
+	}
+	if args[0] == "version" || args[0] == "--version" {
+		info, _ := debug.ReadBuildInfo()
+		fmt.Println(versionString(version, info))
 		return nil
 	}
 	p, err := runtime.Paths()
