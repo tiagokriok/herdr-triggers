@@ -30,6 +30,10 @@ export const TaskSchema = z.object({
   schedule: ScheduleSchema,
   enabled: z.boolean(),
   agent: z.string().min(1).default("claude"),
+  model: z.string().min(1).optional(),
+  agentArgs: z.array(z.string()).optional(),
+  timeoutMinutes: z.number().int().positive().optional(),
+  catchUpMinutes: z.number().int().nonnegative().default(120),
   claudeConfigDir: z.string().min(1).optional(),
 });
 

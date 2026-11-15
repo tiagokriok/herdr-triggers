@@ -11,6 +11,8 @@ let files: AppDeps["files"];
 let calls: string[][];
 let logs: string[];
 let liveTerminals: Set<string>;
+let alerts: string[];
+let waitResult: unknown;
 
 const exec: Exec = async (argv) => {
   calls.push(argv);
@@ -18,7 +20,7 @@ const exec: Exec = async (argv) => {
   if (argv[0] === "herdr-app") return out({ space: "sp5", tab: "tb5", terminal: "t5" });
   if (argv[1] === "get")
     return liveTerminals.has(argv.at(-1)!) ? out({ state: "live", status: null }) : { code: 1, stdout: "", stderr: "not_found" };
-  return out({ ended: true, reason: "status", status: "done" });
+  return out(waitResult);
 };
 
 const writeTasks = (tasks: unknown[]) => writeFileSync(files.tasks, JSON.stringify({ tasks }));
@@ -33,10 +35,41 @@ beforeEach(() => {
   calls = [];
   logs = [];
   liveTerminals = new Set();
+  alerts = [];
+  waitResult = { ended: true, reason: "status", status: "done" };
 });
 
 const deps = (now: string): AppDeps => ({
   files, exec, hc: "hc", app: "herdr-app", now: () => new Date(now), log: (m) => logs.push(m),
+  notify: (title, body) => alerts.push(`${title}|${body}`),
+});
+
+describe("notify", () => {
+  test("a failed run raises one alert naming the task and run", async () => {
+    writeTasks([cron]);
+    waitResult = { ended: true, reason: "status", status: "failed" };
+    await runNow("daily", deps("2026-11-14T09:00:00Z"));
+    expect(alerts).toEqual(["Automations: daily #1 failed|"]);
+  });
+
+  test("an agent error raises an alert", async () => {
+    writeTasks([cron]);
+    waitResult = { ended: true, reason: "status", status: "error" };
+    await runNow("daily", deps("2026-11-14T09:00:00Z"));
+    expect(alerts).toEqual(["Automations: daily #1 error|"]);
+  });
+
+  test("a done run stays quiet", async () => {
+    writeTasks([cron]);
+    await runNow("daily", deps("2026-11-14T09:00:00Z"));
+    expect(alerts).toEqual([]);
+  });
+
+  test("a missed once-task raises an alert", async () => {
+    writeTasks([once]);
+    await step({}, deps("2026-11-14T13:00:00Z"));
+    expect(alerts).toEqual(["Automations: hi missed|due 2026-11-14T10:00:00.000Z"]);
+  });
 });
 
 describe("step", () => {
@@ -85,7 +118,7 @@ describe("step", () => {
 
   test("once-task past due with no run is recorded missed and disabled", async () => {
     writeTasks([once]);
-    await step({}, deps("2026-11-14T12:00:00Z"));
+    await step({}, deps("2026-11-14T13:00:00Z"));
     expect(calls).toEqual([]);
     expect(loadRuns(files.runs)).toEqual([
       { taskId: "hi", n: 1, firedAt: "2026-11-14T10:00:00.000Z", terminal: null, status: "missed" },
@@ -97,7 +130,7 @@ describe("step", () => {
   test("once-task past due that already ran is only disabled", async () => {
     writeTasks([once]);
     writeRuns([{ taskId: "hi", n: 1, firedAt: "2026-11-14T10:00:00.000Z", terminal: "t1", status: "done" }]);
-    await step({}, deps("2026-11-14T12:00:00Z"));
+    await step({}, deps("2026-11-14T13:00:00Z"));
     expect(loadRuns(files.runs)).toHaveLength(1);
     expect(readTasks()[0]!.enabled).toBe(false);
   });

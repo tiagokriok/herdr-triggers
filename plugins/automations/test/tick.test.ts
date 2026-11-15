@@ -10,6 +10,7 @@ const task = (over: Partial<Task> = {}): Task => ({
   schedule: { type: "cron", expr: "0 9 * * *" },
   enabled: true,
   agent: "claude",
+  catchUpMinutes: 0,
   ...over,
 });
 
@@ -71,12 +72,34 @@ describe("planTick", () => {
 
   test("once task already past when first seen is reported missed", () => {
     const t = task({ schedule: { type: "once", runAt: "2026-11-14T10:00:00Z" } });
-    const r = planTick([t], {}, at("2026-11-14T10:00:02Z"));
+    const r = planTick([t], {}, at("2026-11-14T10:02:00Z"));
     expect(r.fire).toEqual([]);
     expect(r.missed.map((m) => [m.task.id, m.at])).toEqual([["t1", "2026-11-14T10:00:00.000Z"]]);
   });
 
   test("cron first seen reports nothing missed", () => {
     expect(planTick([task()], {}, at("2026-11-14T10:00:00Z")).missed).toEqual([]);
+  });
+
+  test("catch-up: a run late by less than catchUpMinutes fires on wake", () => {
+    const armed = planTick([task({ catchUpMinutes: 120 })], {}, at("2026-11-14T08:00:00Z")).state;
+    const r = planTick([task({ catchUpMinutes: 120 })], armed, at("2026-11-14T10:59:00Z"));
+    expect(r.fire.map((t) => t.id)).toEqual(["t1"]);
+    expect(r.missed).toEqual([]);
+    expect(r.state.t1!.at).toBe("2026-11-15T09:00:00.000Z");
+  });
+
+  test("catch-up: later than the window is missed", () => {
+    const armed = planTick([task({ catchUpMinutes: 120 })], {}, at("2026-11-14T08:00:00Z")).state;
+    const r = planTick([task({ catchUpMinutes: 120 })], armed, at("2026-11-14T11:01:00Z"));
+    expect(r.fire).toEqual([]);
+    expect(r.missed).toHaveLength(1);
+  });
+
+  test("catch-up: once task first seen within the window fires", () => {
+    const t = task({ catchUpMinutes: 30, schedule: { type: "once", runAt: "2026-11-14T10:00:00Z" } });
+    const r = planTick([t], {}, at("2026-11-14T10:20:00Z"));
+    expect(r.fire.map((x) => x.id)).toEqual(["t1"]);
+    expect(r.missed).toEqual([]);
   });
 });

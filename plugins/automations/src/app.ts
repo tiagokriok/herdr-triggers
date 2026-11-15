@@ -11,13 +11,17 @@ export type AppDeps = {
   now: () => Date;
   log: (msg: string) => void;
   configDir?: string;
+  notify: (title: string, body: string) => void;
 };
+
+const ALERT = ["failed", "blocked", "timeout", "error"];
 
 const trackingDeps = (deps: AppDeps): DispatchDeps => ({
   ...deps,
   onUpdate: (r) => {
     saveRun(deps.files.runs, r);
     deps.log(`${r.taskId} #${r.n} ${r.status}${r.terminal ? ` ${r.terminal}` : ""}${r.error ? `: ${r.error}` : ""}`);
+    if (ALERT.includes(r.status)) deps.notify(`Automations: ${r.taskId} #${r.n} ${r.status}`, r.error ?? "");
   },
 });
 
@@ -50,6 +54,7 @@ export const step = async (prev: TickState, deps: AppDeps): Promise<StepResult> 
   const plan = planTick(loaded.data.tasks, prev, deps.now());
   for (const { task, at } of plan.missed) {
     deps.log(`missed ${task.id} ${at}`);
+    deps.notify(`Automations: ${task.id} missed`, `due ${at}`);
     if (task.schedule.type !== "once") continue;
     if (!loadRuns(deps.files.runs).some((r) => r.taskId === task.id))
       reserveRun(deps.files.runs, { taskId: task.id, firedAt: at, status: "missed" });

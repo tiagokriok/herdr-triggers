@@ -1,13 +1,13 @@
 # herdr-automations
 
-Local scheduled agent automations for the [Herdr](https://herdr.dev) desktop app, in two parts:
+Local scheduled agent automations for the [Herdr](https://herdr.dev) desktop app, for any agent (Claude Code, Codex, Pi, OpenCode, ...), in two parts:
 
 1. **Scheduler** (`plugins/automations`, Bun): fires tasks from `~/.config/automations/tasks.json` on cron or once schedules. Each run opens a new app space (`<title> run <n>`) with the agent in the task's folder and the prompt as its first message.
 2. **Mod** (`mods/automations`): a Herdr side panel listing the tasks, their next and last runs, with Run now, Enable/Disable, Show run and Start.
 
 ![Automations](mods/automations/preview.png)
 
-The Herdr app must be open for runs to fire (each run is a `herdr-app do space.new`). Missed runs are skipped, not replayed. Webhook triggers are planned.
+The Herdr app must be open for runs to fire (each run is a `herdr-app do space.new`). A run due while the machine slept fires on wake within `catchUpMinutes` (default 120), otherwise it is recorded `missed`. Failed, blocked, timed-out and missed runs raise a desktop notification. Webhook triggers are planned.
 
 ## Install
 
@@ -30,7 +30,7 @@ ln -sfn "$PWD/skills/schedule-local" "$CLAUDE_CONFIG_DIR/skills/schedule-local"
 
 ### What the mod does on your machine
 
-The mod **runs programs** with `exec`: `bun` (the automations CLI), which in turn runs `herdr-app` and `hc`. It **reads `~/.config/automations/cli.json`** (outside its own folder) and, through the CLI, `~/.config/automations/tasks.json` and `~/.local/state/automations/`. It changes `tasks.json` only when you press Enable/Disable. It does not use the network.
+The mod **runs programs** with `exec`: `bun` (the automations CLI), which in turn runs `herdr-app`, `hc`, the task's agent and, for alerts, `notify-send` (`osascript` on macOS). It **reads `~/.config/automations/cli.json`** (outside its own folder) and, through the CLI, `~/.config/automations/tasks.json` and `~/.local/state/automations/`. It changes `tasks.json` only when you press Enable/Disable. It does not use the network.
 
 ## Use
 

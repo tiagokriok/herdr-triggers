@@ -1,6 +1,6 @@
 ---
 name: schedule-local
-description: Use when the user wants to schedule, list, pause, resume, remove or run-now a local recurring/one-off Claude automation on this machine (Herdr desktop app), like /schedule but local.
+description: Use when the user wants to schedule, list, pause, resume, remove or run-now a local recurring/one-off agent automation (Claude Code, Codex, Pi, OpenCode, ...) on this machine (Herdr desktop app), like /schedule but local.
 ---
 
 # schedule-local
@@ -26,11 +26,16 @@ Local scheduled automations run by the `automations` scheduler inside the Herdr 
 ```
 - `id`: `^[a-z0-9][a-z0-9-]*$`, unique. `cwd`: absolute path.
 - `schedule`: `{ "type": "cron", "expr": "<exactly 5 fields, local time>" }` or `{ "type": "once", "runAt": "<ISO with offset, e.g. 2026-11-15T09:00:00-03:00>" }`.
-- `agent` optional, default `claude`. `once` tasks auto-disable after firing.
-- `claudeConfigDir` optional: used only when the scheduler has no `CLAUDE_CONFIG_DIR` in its env (`bin/start` forwards the caller's).
-- Missed runs (scheduler down) are skipped, not replayed. A missed `once` task gets a `missed` run and is disabled.
+- `agent` optional, default `claude`. Known: `claude`, `codex`, `pi`, `opencode`; any other binary gets `--model <m>` and the prompt as last argument. `once` tasks auto-disable after firing.
+- `model` optional: passed as the agent's model flag (`--model`, `-m` for codex).
+- `agentArgs` optional: extra flags, verbatim, before the prompt.
+- `timeoutMinutes` optional: past it the run is killed and recorded `timeout`.
+- `catchUpMinutes` optional, default 120: a run due while the machine slept fires on wake if at most this late; later ones are `missed`. `0` = only within 60s.
+- `claudeConfigDir` optional, claude only: used when the scheduler has no `CLAUDE_CONFIG_DIR` in its env (`bin/start` forwards the caller's).
+- A missed `once` task gets a `missed` run and is disabled.
+- Failed, blocked, timed-out and missed runs raise a desktop notification (`notify-send` / macOS `osascript`).
 - A task never overlaps itself: a fire is skipped while its previous run is still working/blocked.
-- Run status in runs.json: `starting`, `working`, `blocked` (agent waits for input or a confirm prompt is on screen), `done`, `error`, `exit`, `missed`, `failed`.
+- Run status in runs.json: `starting`, `working`, `blocked` (agent waits for input or a confirm prompt is on screen), `done`, `error`, `exit`, `missed`, `failed`, `timeout`.
 
 ## Flow
 1. Ask only what is missing: what to do (prompt), where (cwd, absolute), when. Derive `id`/`title`.

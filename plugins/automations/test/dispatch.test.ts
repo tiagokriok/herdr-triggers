@@ -10,6 +10,7 @@ const task: Task = {
   schedule: { type: "cron", expr: "0 2 * * *" },
   enabled: true,
   agent: "claude",
+  catchUpMinutes: 120,
 };
 
 const ok = (o: unknown) => ({ code: 0, stdout: JSON.stringify(o), stderr: "" });
@@ -38,6 +39,8 @@ const deps = (exec: Exec, onUpdate: (r: RunRecord) => void = () => {}): Dispatch
   hc: "hc",
   app: "herdr-app",
   onUpdate,
+  now: () => new Date("2026-11-30T02:00:00.000Z"),
+  pause: async () => {},
 });
 
 const statuses = () => {
@@ -110,6 +113,30 @@ describe("watchRun", () => {
     expect(calls.filter((c) => c[1] === "wait")).toHaveLength(2);
   });
 
+  test("a message to the caller is a check-in, not the end", async () => {
+    const { exec } = fakeExec({ waits: [{ ended: false, reason: "message", status: "working" }, { ended: true, reason: "status", status: "done" }] });
+    expect((await watchRun(working(), deps(exec))).status).toBe("done");
+  });
+
+  test("startup idle before the first turn is a check-in", async () => {
+    const { exec } = fakeExec({ waits: [{ ended: true, reason: "status", status: "idle", turn: 0 }, { ended: true, reason: "status", status: "done", turn: 1 }] });
+    const pauses: number[] = [];
+    const final = await watchRun(working(), { ...deps(exec), pause: async (ms) => { pauses.push(ms); } });
+    expect(final.status).toBe("done");
+    expect(pauses).toEqual([2000]);
+  });
+
+  test("startup idle still honours timeoutAt", async () => {
+    const { exec } = fakeExec({ waits: [{ ended: true, reason: "status", status: "idle", turn: 0 }] });
+    const final = await watchRun({ ...working(), timeoutAt: "2026-11-30T01:00:00.000Z" }, deps(exec));
+    expect(final.status).toBe("timeout");
+  });
+
+  test("idle after a turn ends the run", async () => {
+    const { exec } = fakeExec({ waits: [{ ended: true, reason: "status", status: "idle", turn: 1 }] });
+    expect((await watchRun(working(), deps(exec))).status).toBe("idle");
+  });
+
   test("garbage from hc wait records failed", async () => {
     const exec: Exec = async () => ({ code: 0, stdout: "???", stderr: "" });
     const { seen, onUpdate } = statuses();
@@ -157,5 +184,23 @@ describe("watchRun", () => {
     const { seen, onUpdate } = statuses();
     await watchRun(working(), deps(exec, onUpdate));
     expect(seen).toEqual(["exit"]);
+  });
+
+  test("past timeoutAt the run is killed and recorded timeout", async () => {
+    const { exec, calls } = fakeExec({ waits: [{ ended: false, reason: "timeout" }, { ended: false, reason: "timeout" }] });
+    const times = ["2026-11-30T02:00:30.000Z", "2026-11-30T02:01:01.000Z"].map((t) => new Date(t));
+    const { seen, onUpdate } = statuses();
+    const final = await watchRun({ ...working(), timeoutAt: "2026-11-30T02:01:00.000Z" }, { ...deps(exec, onUpdate), now: () => times.shift()! });
+    expect(final.status).toBe("timeout");
+    expect(seen).toEqual(["timeout"]);
+    expect(calls).toContainEqual(["hc", "kill", "t9"]);
+  });
+});
+
+describe("runTask timeout", () => {
+  test("timeoutMinutes sets timeoutAt from now", async () => {
+    const { exec } = fakeExec({ waits: [{ ended: true, reason: "exit" }] });
+    const final = await runTask({ ...task, timeoutMinutes: 45 }, rec(), deps(exec));
+    expect(final.timeoutAt).toBe("2026-11-30T02:45:00.000Z");
   });
 });

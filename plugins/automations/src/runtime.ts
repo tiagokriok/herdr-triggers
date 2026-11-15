@@ -14,6 +14,15 @@ export const exec: Exec = async (argv) => {
   return { code, stdout, stderr };
 };
 
+const notifyArgv = (title: string, body: string) =>
+  process.platform === "darwin"
+    ? ["osascript", "-e", `display notification ${JSON.stringify(body)} with title ${JSON.stringify(title)}`]
+    : ["notify-send", "--app-name=Automations", title, body];
+
+export const notify = (title: string, body: string) => {
+  exec(notifyArgv(title, body)).catch(() => {});
+};
+
 const binaries = () => ({
   hc: process.env.AUTOMATIONS_HC ?? "herdr-core",
   app: process.env.AUTOMATIONS_APP ?? "herdr-app",
@@ -26,6 +35,7 @@ export const runtimeDeps = (): AppDeps => ({
   exec,
   now: () => new Date(),
   log: (msg) => console.log(`${new Date().toISOString()} ${msg}`),
+  notify,
 });
 
 export const daemonDeps = (): DaemonDeps => ({

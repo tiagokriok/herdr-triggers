@@ -11,6 +11,8 @@ export const GRACE_MS = 60_000;
 
 const signature = (task: Task) => JSON.stringify(task.schedule);
 
+const windowMs = (task: Task) => Math.max(GRACE_MS, task.catchUpMinutes * 60_000);
+
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
 export const planTick = (tasks: Task[], prev: TickState, now: Date): TickPlan => {
@@ -24,8 +26,11 @@ export const planTick = (tasks: Task[], prev: TickState, now: Date): TickPlan =>
     const armed = prev[task.id];
 
     if (!armed || armed.sig !== sig) {
-      if (task.schedule.type === "once" && new Date(task.schedule.runAt) <= now)
-        missed.push({ task, at: new Date(task.schedule.runAt).toISOString() });
+      if (task.schedule.type === "once" && new Date(task.schedule.runAt) <= now) {
+        const runAt = new Date(task.schedule.runAt);
+        if (now.getTime() - runAt.getTime() <= windowMs(task)) fire.push(task);
+        else missed.push({ task, at: runAt.toISOString() });
+      }
       state[task.id] = { sig, at: iso(nextRun(task.schedule, now)) };
       continue;
     }
@@ -35,7 +40,7 @@ export const planTick = (tasks: Task[], prev: TickState, now: Date): TickPlan =>
       continue;
     }
 
-    if (now.getTime() - new Date(armed.at).getTime() <= GRACE_MS) fire.push(task);
+    if (now.getTime() - new Date(armed.at).getTime() <= windowMs(task)) fire.push(task);
     else missed.push({ task, at: armed.at });
     state[task.id] = { sig, at: iso(nextRun(task.schedule, now)) };
   }

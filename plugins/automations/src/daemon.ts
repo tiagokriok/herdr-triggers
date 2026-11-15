@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { envArgv, parseJson, type Exec } from "./dispatch";
+import { envArgv } from "./agents";
+import { parseJson, type Exec } from "./dispatch";
 import { writeJson } from "./store";
 
 export type DaemonDeps = {
