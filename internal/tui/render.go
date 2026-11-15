@@ -20,6 +20,7 @@ type screenData struct {
 	width, height int
 	cursor        int
 	sched         daemon.State
+	backend       string
 	public        string
 	publicErr     string
 	config        tunnel.Config
@@ -176,6 +177,9 @@ func header(s screenData) []string {
 	state := green.Render("● scheduler on")
 	if s.sched.State != "live" {
 		state = red.Render("○ scheduler off") + dim.Render(" · s to start")
+	}
+	if s.backend != "" {
+		state += dim.Render(" · runs in " + s.backend)
 	}
 	if s.public != "" {
 		state += dim.Render(" · ") + s.public

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -20,6 +21,7 @@ type Run struct {
 	TimeoutAt *time.Time `json:"timeoutAt,omitempty"`
 	Status    string     `json:"status"`
 	Error     string     `json:"error,omitempty"`
+	Backend   string     `json:"backend,omitempty"`
 }
 
 func (r Run) Active() bool {
@@ -82,6 +84,10 @@ func Open(path string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
+	if _, err := db.Exec(`ALTER TABLE runs ADD COLUMN backend TEXT NOT NULL DEFAULT 'app'`); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+		db.Close()
+		return nil, err
+	}
 	return &DB{db}, nil
 }
 
@@ -111,13 +117,17 @@ func (d *DB) Save(r Run) error {
 	if r.TimeoutAt != nil {
 		timeout = r.TimeoutAt.UTC().Format(stamp)
 	}
-	_, err := d.sql.Exec(`INSERT INTO runs (task_id, n, fired_at, terminal, space, timeout_at, status, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT (task_id, n) DO UPDATE SET terminal = excluded.terminal, space = excluded.space, timeout_at = excluded.timeout_at, status = excluded.status, error = excluded.error`,
-		r.TaskID, r.N, r.FiredAt.UTC().Format(stamp), r.Terminal, r.Space, timeout, r.Status, r.Error)
+	backend := r.Backend
+	if backend == "" {
+		backend = "app"
+	}
+	_, err := d.sql.Exec(`INSERT INTO runs (task_id, n, fired_at, terminal, space, timeout_at, status, error, backend) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (task_id, n) DO UPDATE SET terminal = excluded.terminal, space = excluded.space, timeout_at = excluded.timeout_at, status = excluded.status, error = excluded.error, backend = excluded.backend`,
+		r.TaskID, r.N, r.FiredAt.UTC().Format(stamp), r.Terminal, r.Space, timeout, r.Status, r.Error, backend)
 	return err
 }
 
-const runCols = `task_id, n, fired_at, terminal, space, timeout_at, status, error`
+const runCols = `task_id, n, fired_at, terminal, space, timeout_at, status, error, backend`
 
 func scanRuns(rows *sql.Rows, err error) ([]Run, error) {
 	if err != nil {
@@ -129,7 +139,7 @@ func scanRuns(rows *sql.Rows, err error) ([]Run, error) {
 		var r Run
 		var fired string
 		var timeout sql.NullString
-		if err := rows.Scan(&r.TaskID, &r.N, &fired, &r.Terminal, &r.Space, &timeout, &r.Status, &r.Error); err != nil {
+		if err := rows.Scan(&r.TaskID, &r.N, &fired, &r.Terminal, &r.Space, &timeout, &r.Status, &r.Error, &r.Backend); err != nil {
 			return nil, err
 		}
 		r.FiredAt, _ = time.Parse(stamp, fired)

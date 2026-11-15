@@ -2,8 +2,6 @@ package tunnel
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -86,27 +84,5 @@ func TestOpenFailures(t *testing.T) {
 	hang := func([]string) (<-chan string, func(), error) { return make(chan string), func() {}, nil }
 	if _, _, err := Open(Config{Provider: "cloudflared"}, "127.0.0.1:8787", hang, 10*time.Millisecond); err == nil || !strings.Contains(err.Error(), "no public url") {
 		t.Fatal(err)
-	}
-}
-
-func TestConfig(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "config.json")
-	if c, err := Load(file); err != nil || c.Provider != "none" {
-		t.Fatal(c, err)
-	}
-	if err := Save(file, Config{Provider: "url"}); err == nil || !strings.Contains(err.Error(), "baseUrl") {
-		t.Fatal(err)
-	}
-	if err := Save(file, Config{Provider: "ngrok", Domain: "d.ngrok.app"}); err != nil {
-		t.Fatal(err)
-	}
-	if c, err := Load(file); err != nil || c != (Config{Provider: "ngrok", Domain: "d.ngrok.app"}) {
-		t.Fatal(c, err)
-	}
-	for _, bad := range []string{`{"provider":"frp"}`, `{"provider":"none","x":1}`, `{"provider":"url","baseUrl":"ftp://x"}`} {
-		os.WriteFile(file, []byte(bad), 0o644)
-		if _, err := Load(file); err == nil {
-			t.Fatal(bad)
-		}
 	}
 }

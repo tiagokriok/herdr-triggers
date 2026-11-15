@@ -46,7 +46,7 @@ func TestList(t *testing.T) {
 	db.SetMeta(PublicURLKey, "https://box.ts.net")
 	got, _ := json.Marshal(List(tasks, db, time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)))
 	want := `{"tasks":[{"id":"daily","title":"Daily","schedule":"daily at 09:00","enabled":true,"agent":"pi","model":"m1","next":"2026-11-15T09:00:00Z","last":{"n":1,"status":"blocked","firedAt":"2026-11-14T09:00:00Z","space":"sp2","terminal":"t2"}},` +
-		`{"id":"paused","title":"Paused","schedule":"weekdays at 18:30","enabled":false,"agent":"claude","model":"","next":null,"last":null}],"publicUrl":"https://box.ts.net"}`
+		`{"id":"paused","title":"Paused","schedule":"weekdays at 18:30","enabled":false,"agent":"claude","model":"","next":null,"last":null}],"publicUrl":"https://box.ts.net","scheduler":"stopped"}`
 	if string(got) != want {
 		t.Fatalf("\n got %s\nwant %s", got, want)
 	}
@@ -64,5 +64,21 @@ func TestListInvalid(t *testing.T) {
 func TestHookURL(t *testing.T) {
 	if got := HookURL("https://box.ts.net", "alert", "tok"); got != "https://box.ts.net/hooks/alert/tok" {
 		t.Fatal(got)
+	}
+}
+
+func TestScheduler(t *testing.T) {
+	db, _ := store.Open(filepath.Join(t.TempDir(), "state.db"))
+	defer db.Close()
+	now := time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)
+	if Scheduler(db, now) != "stopped" {
+		t.Fatal("no heartbeat")
+	}
+	Beat(db, now.Add(-10*time.Second))
+	if Scheduler(db, now) != "live" {
+		t.Fatal("fresh")
+	}
+	if Scheduler(db, now.Add(time.Minute)) != "stopped" {
+		t.Fatal("stale")
 	}
 }

@@ -45,3 +45,15 @@ func Argv(t task.Task, configDir string) []string {
 	}
 	return EnvArgv(configDir, argv)
 }
+
+func Flags(t task.Task) []string {
+	p, ok := profiles[t.Agent]
+	if !ok {
+		p = generic
+	}
+	var flags []string
+	if t.Model != "" {
+		flags = append(flags, p.modelFlag, t.Model)
+	}
+	return append(flags, t.AgentArgs...)
+}

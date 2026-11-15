@@ -70,8 +70,12 @@ func closeSpace(d Deps, space string) {
 	d.Exec([]string{d.App, "do", "space.close", "--id", space, "--confirmed", "true"})
 }
 
+func WriteCLI(d Deps) error {
+	return store.WriteJSON(d.CLIFile, map[string]any{"argv": []string{d.Exe}})
+}
+
 func Start(d Deps) (string, error) {
-	if err := store.WriteJSON(d.CLIFile, map[string]any{"argv": []string{d.Exe}}); err != nil {
+	if err := WriteCLI(d); err != nil {
 		return "", err
 	}
 	if prev, ok := remembered(d.File); ok {

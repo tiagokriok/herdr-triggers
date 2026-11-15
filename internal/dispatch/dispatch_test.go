@@ -19,6 +19,8 @@ type fake struct {
 	waits, gets []any
 	screens     []string
 	spaceNew    *Result
+	appStatus   []Result
+	spawned     [][]string
 	calls       [][]string
 }
 
@@ -35,6 +37,11 @@ func pop[T any](q *[]T) (T, bool) {
 func (f *fake) exec(argv []string) Result {
 	f.calls = append(f.calls, argv)
 	switch {
+	case argv[0] == "herdr-app" && argv[1] == "status":
+		if r, ok := pop(&f.appStatus); ok {
+			return r
+		}
+		return js(map[string]any{"space": "sp0"})
 	case argv[0] == "herdr-app":
 		if f.spaceNew != nil {
 			return *f.spaceNew
@@ -69,6 +76,7 @@ func deps(f *fake, seen *[]string) Deps {
 		},
 		Now:   func() time.Time { return mustTime(now) },
 		Pause: func(time.Duration) {},
+		Spawn: func(argv []string) error { f.spawned = append(f.spawned, argv); return nil },
 	}
 }
 
@@ -85,8 +93,8 @@ func TestRunTaskOpensSpaceAndWaits(t *testing.T) {
 	var seen []string
 	final := RunTask(base, rec(), deps(f, &seen))
 	payload, _ := json.Marshal(map[string]any{"name": "Nightly triage run 3", "folder": "/w/proj", "argv": []string{"claude", "--"}, "task": "triage the inbox"})
-	want := [][]string{{"herdr-app", "do", "space.new", string(payload)}, {"hc", "wait", "--json", "--timeout", "30", "t9"}}
-	if len(f.calls) != 2 || !slices.Equal(f.calls[0], want[0]) || !slices.Equal(f.calls[1], want[1]) {
+	want := [][]string{{"herdr-app", "status"}, {"herdr-app", "do", "space.new", string(payload)}, {"hc", "wait", "--json", "--timeout", "30", "t9"}}
+	if len(f.calls) != 3 || !slices.Equal(f.calls[0], want[0]) || !slices.Equal(f.calls[1], want[1]) || !slices.Equal(f.calls[2], want[2]) {
 		t.Fatalf("calls %q", f.calls)
 	}
 	if final.Terminal != "t9" || final.Space != "sp1" || final.Status != "done" || !slices.Equal(seen, []string{"working", "done"}) {
@@ -96,7 +104,7 @@ func TestRunTaskOpensSpaceAndWaits(t *testing.T) {
 
 func sent(f *fake) map[string]any {
 	var m map[string]any
-	json.Unmarshal([]byte(f.calls[0][3]), &m)
+	json.Unmarshal([]byte(f.calls[1][3]), &m)
 	return m
 }
 
@@ -132,7 +140,7 @@ func TestRunTaskSpaceNewFailures(t *testing.T) {
 			f := &fake{spaceNew: &res}
 			var seen []string
 			final := RunTask(base, rec(), deps(f, &seen))
-			if final.Status != "failed" || !strings.Contains(final.Error, map[string]string{"error": "no window", "garbage": "not json"}[name]) || len(f.calls) != 1 || !slices.Equal(seen, []string{"failed"}) {
+			if final.Status != "failed" || !strings.Contains(final.Error, map[string]string{"error": "no window", "garbage": "not json"}[name]) || len(f.calls) != 2 || !slices.Equal(seen, []string{"failed"}) {
 				t.Fatalf("%+v %v", final, seen)
 			}
 		})
@@ -234,4 +242,25 @@ func TestWatch(t *testing.T) {
 			t.Fatal(final)
 		}
 	})
+}
+
+func TestRunTaskOpensClosedApp(t *testing.T) {
+	closed := Result{Code: 2, Stderr: "herdr-app: no Herdr window"}
+	f := &fake{appStatus: []Result{closed, closed, closed}, waits: []any{w{"ended": true, "reason": "status", "status": "done"}}}
+	final := RunTask(base, rec(), deps(f, nil))
+	if final.Status != "done" || len(f.spawned) != 1 || !slices.Equal(f.spawned[0], []string{"herdr-app"}) {
+		t.Fatalf("%+v %q", final, f.spawned)
+	}
+}
+
+func TestRunTaskAppNeverOpens(t *testing.T) {
+	closed := Result{Code: 2, Stderr: "herdr-app: no Herdr window"}
+	f := &fake{}
+	for range 100 {
+		f.appStatus = append(f.appStatus, closed)
+	}
+	final := RunTask(base, rec(), deps(f, nil))
+	if final.Status != "failed" || !strings.Contains(final.Error, "no Herdr window") {
+		t.Fatalf("%+v", final)
+	}
 }

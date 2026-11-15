@@ -1,20 +1,14 @@
 package tunnel
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
-
-	"github.com/tiagokriok/herdr-triggers/internal/store"
 )
 
 var Providers = []string{"none", "url", "tailscale", "ngrok", "cloudflared"}
@@ -55,34 +49,6 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
-}
-
-func Load(file string) (Config, error) {
-	data, err := os.ReadFile(file)
-	if errors.Is(err, fs.ErrNotExist) {
-		return Config{Provider: "none"}, nil
-	}
-	if err != nil {
-		return Config{}, err
-	}
-	var c Config
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&c); err != nil {
-		return Config{}, fmt.Errorf("config.json: %w", err)
-	}
-	c.Provider = c.provider()
-	if err := c.Validate(); err != nil {
-		return Config{}, fmt.Errorf("config.json: %w", err)
-	}
-	return c, nil
-}
-
-func Save(file string, c Config) error {
-	if err := c.Validate(); err != nil {
-		return err
-	}
-	return store.WriteJSON(file, c)
 }
 
 func argv(c Config, addr string) []string {

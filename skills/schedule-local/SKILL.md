@@ -1,11 +1,11 @@
 ---
 name: schedule-local
-description: Use when the user wants to schedule, list, pause, resume, remove or run-now a local recurring/one-off agent automation (Claude Code, Codex, Pi, OpenCode, ...) on this machine (Herdr desktop app), like /schedule but local.
+description: Use when the user wants to schedule, list, pause, resume, remove or run-now a local recurring/one-off/webhook agent automation (Claude Code, Codex, Pi, OpenCode, ...) on this machine or server (Herdr app or herdr CLI), like /schedule but local.
 ---
 
 # schedule-local
 
-Local automations run by `herdr-triggers` inside the Herdr desktop app, on cron, once or webhook triggers. Each run opens a new app space named `<title> run <n>` with the agent in the task's `cwd`, and the prompt as its first message.
+Local automations run by `herdr-triggers` on cron, once or webhook triggers. Each run opens a new Herdr app space, or a `herdr` CLI workspace (`herdr-triggers backend`), named `<title> run <n>`, with the agent in the task's `cwd` and the prompt as its first message.
 
 ## Files
 - Tasks: `${XDG_CONFIG_HOME:-~/.config}/herdr-triggers/tasks.json` (re-read every 5s)
@@ -43,7 +43,7 @@ Local automations run by `herdr-triggers` inside the Herdr desktop app, on cron,
 2. Read the file (create `{ "tasks": [] }` if missing). Edit with minimal JSON changes; never touch other tasks.
    - pause/resume: flip `enabled`. remove: delete the entry.
 3. Validate and show next fire times: `herdr-triggers list`.
-   It fails loudly on invalid JSON/cron. Confirm next times with the user. For a webhook, generate the token with `herdr-triggers token` and give the user the full URL. If `public` says provider `none`, ask which tunnel they want (`herdr-triggers public tailscale|ngrok [domain]|cloudflared|url <baseUrl>`), then restart with `herdr-triggers stop && herdr-triggers start`.
-4. Make sure the scheduler runs: `herdr-triggers start` (idempotent; needs the Herdr app open).
+   It fails loudly on invalid JSON/cron. Confirm next times with the user. For a webhook, generate the token with `herdr-triggers token` and give the user the full URL. If `public` says provider `none`, ask which tunnel they want (`herdr-triggers public tailscale|ngrok [domain]|cloudflared|url <baseUrl>`), then restart with `herdr-triggers service restart` (or `stop` + `start` without the service).
+4. Make sure the scheduler runs: `herdr-triggers status`. If stopped: `herdr-triggers service install` (background service; on a server also `sudo loginctl enable-linger $USER`), or `herdr-triggers start` (runs it in an app space).
 5. Run now: `herdr-triggers run-now <id> --bg`. pause/resume also: `herdr-triggers disable|enable <id>`.
 6. The user can also do all of this in `herdr-triggers tui`.

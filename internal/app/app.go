@@ -115,12 +115,7 @@ func (a *App) Reconcile() []<-chan store.Run {
 	d := a.tracking()
 	var watches []<-chan store.Run
 	for _, r := range active {
-		live := false
-		if r.Terminal != "" {
-			got := d.Exec([]string{d.HC, "get", "--json", r.Terminal})
-			st, ok := dispatch.ParseJSON[struct{ State string }](got.Stdout)
-			live = got.Code == 0 && ok && st.State == "live"
-		}
+		live := dispatch.Alive(r, d)
 		if !live {
 			r.Status = "exit"
 			d.OnUpdate(r)

@@ -14,8 +14,10 @@ import (
 	"github.com/charmbracelet/huh"
 
 	"github.com/tiagokriok/herdr-triggers/internal/app"
+	"github.com/tiagokriok/herdr-triggers/internal/config"
 	"github.com/tiagokriok/herdr-triggers/internal/daemon"
 	"github.com/tiagokriok/herdr-triggers/internal/runtime"
+	"github.com/tiagokriok/herdr-triggers/internal/service"
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/task"
 	"github.com/tiagokriok/herdr-triggers/internal/tunnel"
@@ -43,6 +45,7 @@ type model struct {
 	listing view.Listing
 	sched   daemon.State
 	config  tunnel.Config
+	backend string
 	full    task.Task
 	runs    []store.Run
 	hooks   []store.Delivery
@@ -76,7 +79,10 @@ func Run(p store.Paths, a *app.App) error {
 func (m *model) reload() {
 	m.listing = view.List(m.paths.Tasks, m.app.DB, time.Now())
 	m.sched = daemon.Status(m.daemon)
-	m.config, _ = tunnel.Load(m.paths.Config)
+	m.sched.State = m.listing.Scheduler
+	cfg, _ := config.Load(m.paths.Config)
+	m.config = cfg.Public
+	m.backend = cfg.ResolveBackend(exec.LookPath)
 	m.cursor = min(m.cursor, max(0, len(m.listing.Tasks)-1))
 	m.loadSelected()
 }
@@ -173,7 +179,13 @@ func (m *model) save() {
 }
 
 func (m *model) savePublic() {
-	if err := tunnel.Save(m.paths.Config, *m.public); err != nil {
+	cfg, err := config.Load(m.paths.Config)
+	if err != nil {
+		m.fail(err)
+		return
+	}
+	cfg.Public = *m.public
+	if err := config.Save(m.paths.Config, cfg); err != nil {
 		m.fail(fmt.Errorf("not saved: %w", err))
 		return
 	}
@@ -213,7 +225,15 @@ func copyText(s string) error {
 }
 
 func (m *model) restart() {
-	if m.sched.State == "live" {
+	if sd, err := runtime.ServiceDeps(); err == nil && service.Installed(sd) {
+		if err := service.Restart(sd); err != nil {
+			m.fail(err)
+			return
+		}
+		m.message = green.Render("service restarted")
+		return
+	}
+	if daemon.Status(m.daemon).State == "live" {
 		if _, err := daemon.Stop(m.daemon); err != nil {
 			m.fail(err)
 			return
@@ -347,7 +367,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) screen() screenData {
 	return screenData{
 		now: time.Now(), width: m.width, height: m.height, cursor: m.cursor,
-		sched: m.sched, public: m.publicURL(), config: m.config, listing: m.listing,
+		sched: m.sched, backend: m.backend, public: m.publicURL(), config: m.config, listing: m.listing,
 		selected: m.full, runs: m.runs, hooks: m.hooks, reveal: m.reveal,
 		publicErr: publicErr(m), message: m.message, help: listHelp,
 	}

@@ -14,9 +14,11 @@ import (
 	"time"
 
 	"github.com/tiagokriok/herdr-triggers/internal/app"
+	"github.com/tiagokriok/herdr-triggers/internal/config"
 	"github.com/tiagokriok/herdr-triggers/internal/daemon"
 	"github.com/tiagokriok/herdr-triggers/internal/runtime"
 	"github.com/tiagokriok/herdr-triggers/internal/schedule"
+	"github.com/tiagokriok/herdr-triggers/internal/service"
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/tui"
 	"github.com/tiagokriok/herdr-triggers/internal/tunnel"
@@ -30,13 +32,18 @@ const usage = `herdr-triggers: scheduled and webhook-triggered agent runs for th
   list [--json]          tasks with schedule, next and last run
   run-now <id> [--bg]    run a task now (--bg: return at once)
   enable <id> | disable <id>
-  status [--json]        is the scheduler running
-  start | stop           open or close the scheduler space in the app
+  status [--json]        is the scheduler running, which backend runs agents
+  service install | uninstall | restart
+                         run the scheduler as a user service (systemd, launchd):
+                         starts on login, survives closing the app; for servers
+  start | stop           or run the scheduler in a space of the Herdr app
   serve                  the scheduler itself (what start runs)
   token                  print a new random webhook token
   public                 show how webhooks are exposed and the public url
   public <provider> [x]  none | url <baseUrl> | tailscale | ngrok [domain] | cloudflared
-                         (restart the scheduler with stop + start to apply)
+  backend [auto|app|cli] [session]
+                         where runs open: the Herdr app, or the herdr CLI server
+                         (auto: the app when installed); restart to apply
 `
 
 const tick = 5 * time.Second
@@ -92,19 +99,69 @@ func run(args []string) error {
 		if len(rest) == 0 {
 			break
 		}
-		c := tunnel.Config{Provider: rest[0]}
-		if len(rest) > 1 {
-			if c.Provider == "url" {
-				c.BaseURL = rest[1]
-			} else {
-				c.Domain = rest[1]
-			}
-		}
-		if err := tunnel.Save(p.Config, c); err != nil {
+		cfg, err := config.Load(p.Config)
+		if err != nil {
 			return err
 		}
-		fmt.Println("saved; apply with: herdr-triggers stop && herdr-triggers start")
+		cfg.Public = tunnel.Config{Provider: rest[0]}
+		if len(rest) > 1 {
+			if rest[0] == "url" {
+				cfg.Public.BaseURL = rest[1]
+			} else {
+				cfg.Public.Domain = rest[1]
+			}
+		}
+		if err := config.Save(p.Config, cfg); err != nil {
+			return err
+		}
+		fmt.Println("saved; restart the scheduler to apply")
 		return nil
+	case "backend":
+		cfg, err := config.Load(p.Config)
+		if err != nil {
+			return err
+		}
+		if len(rest) == 0 {
+			fmt.Printf("backend %s (runs use %s)\n", cfg.Backend, cfg.ResolveBackend(exec.LookPath))
+			return nil
+		}
+		cfg.Backend, cfg.Session = rest[0], ""
+		if len(rest) > 1 {
+			cfg.Session = rest[1]
+		}
+		if err := config.Save(p.Config, cfg); err != nil {
+			return err
+		}
+		fmt.Println("saved; restart the scheduler to apply")
+		return nil
+	case "service":
+		d, err := runtime.ServiceDeps()
+		if err != nil {
+			return err
+		}
+		switch {
+		case has(rest, "install"):
+			dd, err := runtime.DaemonDeps(p)
+			if err != nil {
+				return err
+			}
+			if daemon.Status(dd).State == "live" {
+				daemon.Stop(dd)
+			}
+			if err := daemon.WriteCLI(dd); err != nil {
+				return err
+			}
+			msg, err := service.Install(d)
+			if err == nil {
+				fmt.Println(msg)
+			}
+			return err
+		case has(rest, "uninstall"):
+			return service.Uninstall(d)
+		case has(rest, "restart"):
+			return service.Restart(d)
+		}
+		return errors.New("service install | uninstall | restart")
 	case "enable", "disable":
 		id, err := idArg(rest)
 		if err != nil {
@@ -115,30 +172,46 @@ func run(args []string) error {
 		}
 		fmt.Printf("%sd %s\n", cmd, id)
 		return nil
-	case "start", "stop", "status":
+	case "start", "stop":
 		d, err := runtime.DaemonDeps(p)
 		if err != nil {
 			return err
 		}
-		switch cmd {
-		case "start":
-			msg, err := daemon.Start(d)
-			if err == nil {
-				fmt.Println(msg)
-			}
-			return err
-		case "stop":
-			msg, err := daemon.Stop(d)
-			if err == nil {
-				fmt.Println(msg)
-			}
+		if sd, err := runtime.ServiceDeps(); err == nil && service.Installed(sd) && cmd == "start" {
+			return errors.New("the scheduler runs as a service; use: herdr-triggers service restart")
+		}
+		run := daemon.Start
+		if cmd == "stop" {
+			run = daemon.Stop
+		}
+		msg, err := run(d)
+		if err == nil {
+			fmt.Println(msg)
+		}
+		return err
+	case "status":
+		d, err := runtime.DaemonDeps(p)
+		if err != nil {
 			return err
 		}
-		s := daemon.Status(d)
+		sd, err := runtime.ServiceDeps()
+		if err != nil {
+			return err
+		}
+		db, err := store.Open(p.DB)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		cfg, _ := config.Load(p.Config)
+		st := status{State: view.Scheduler(db, time.Now()), Mode: "space", Backend: cfg.ResolveBackend(exec.LookPath), Terminal: daemon.Status(d).Terminal}
+		if service.Installed(sd) {
+			st.Mode = "service"
+		}
 		if has(rest, "--json") {
-			return printJSON(s)
+			return printJSON(st)
 		}
-		fmt.Println(s.State, s.Terminal)
+		fmt.Println(st.State, st.Mode, "backend:"+st.Backend, st.Terminal)
 		return nil
 	}
 
@@ -187,10 +260,11 @@ func run(args []string) error {
 		}
 		return nil
 	case "public":
-		c, err := tunnel.Load(p.Config)
+		cfg, err := config.Load(p.Config)
 		if err != nil {
 			return err
 		}
+		c := cfg.Public
 		l := view.List(p.Tasks, a.DB, time.Now())
 		fmt.Printf("provider %s %s%s\n", c.Provider, c.BaseURL, c.Domain)
 		if l.PublicURL != "" {
@@ -224,14 +298,21 @@ func clearPublic(a *app.App) {
 	a.DB.SetMeta(view.PublicErrorKey, "")
 }
 
+type status struct {
+	State    string `json:"state"`
+	Mode     string `json:"mode"`
+	Backend  string `json:"backend"`
+	Terminal string `json:"terminal,omitempty"`
+}
+
 func expose(a *app.App, p store.Paths) func() {
 	clearPublic(a)
 	addr := runtime.Addr()
-	cfg, err := tunnel.Load(p.Config)
+	cfg, err := config.Load(p.Config)
 	if err == nil {
 		var url string
 		var stop func()
-		url, stop, err = tunnel.Open(cfg, addr, runtime.Start, 45*time.Second)
+		url, stop, err = tunnel.Open(cfg.Public, addr, runtime.Start, 45*time.Second)
 		if err == nil {
 			a.DB.SetMeta(view.PublicURLKey, url)
 			a.Log("webhooks on " + view.HookURL(url, "<id>", "<token>"))
@@ -261,10 +342,13 @@ func serve(a *app.App, p store.Paths) error {
 		<-sig
 		stop()
 		clearPublic(a)
+		view.Unbeat(a.DB)
 		os.Exit(0)
 	}()
+	a.Log("backend: " + a.Dispatch.Backend)
 	var state schedule.State
 	for {
+		view.Beat(a.DB, time.Now())
 		next, _ := a.Step(state)
 		for id, s := range next {
 			if prev, ok := state[id]; !ok || !sameTime(prev.At, s.At) {

@@ -23,6 +23,9 @@ type Exec func(argv []string) Result
 
 type Deps struct {
 	Exec      Exec
+	Spawn     func(argv []string) error
+	Backend   string
+	Herdr     []string
 	HC        string
 	App       string
 	OnUpdate  func(store.Run)
@@ -103,6 +106,9 @@ func deref(s *string) string {
 }
 
 func WatchRun(r store.Run, d Deps) store.Run {
+	if r.Backend == "cli" {
+		return watchCLI(r, d, -1)
+	}
 	for {
 		waited := d.Exec([]string{d.HC, "wait", "--json", "--timeout", waitSeconds, r.Terminal})
 		res, ok := ParseJSON[*waitResult](waited.Stdout)
@@ -146,7 +152,33 @@ type spaceMade struct {
 	Error    string `json:"error"`
 }
 
+const openTries = 60
+
+func ensureApp(d Deps) error {
+	status := d.Exec([]string{d.App, "status"})
+	if status.Code == 0 {
+		return nil
+	}
+	if err := d.Spawn([]string{d.App}); err != nil {
+		return err
+	}
+	for range openTries {
+		d.Pause(time.Second)
+		if status = d.Exec([]string{d.App, "status"}); status.Code == 0 {
+			return nil
+		}
+	}
+	return fmt.Errorf("herdr-app did not open: %s", output(status))
+}
+
 func RunTask(t task.Task, r store.Run, d Deps) store.Run {
+	if d.Backend == "cli" {
+		return runCLI(t, r, d)
+	}
+	r.Backend = "app"
+	if err := ensureApp(d); err != nil {
+		return finish(r, d, "failed", err.Error())
+	}
 	payload, _ := json.Marshal(map[string]any{
 		"name":   fmt.Sprintf("%s run %d", t.Title, r.N),
 		"folder": t.Cwd,
@@ -169,4 +201,16 @@ func RunTask(t task.Task, r store.Run, d Deps) store.Run {
 	}
 	r = finish(r, d, "working", "")
 	return WatchRun(r, d)
+}
+
+func Alive(r store.Run, d Deps) bool {
+	if r.Terminal == "" {
+		return false
+	}
+	if r.Backend == "cli" {
+		return d.Exec(d.herdr("agent", "get", r.Terminal)).Code == 0
+	}
+	got := d.Exec([]string{d.HC, "get", "--json", r.Terminal})
+	st, ok := ParseJSON[struct{ State string }](got.Stdout)
+	return got.Code == 0 && ok && st.State == "live"
 }

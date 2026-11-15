@@ -47,6 +47,8 @@ func newEnv(t *testing.T) *env {
 				defer e.mu.Unlock()
 				e.calls = append(e.calls, argv)
 				switch {
+				case argv[0] == "herdr-app" && argv[1] == "status":
+					return dispatch.Result{}
 				case argv[0] == "herdr-app":
 					var m map[string]any
 					json.Unmarshal([]byte(argv[3]), &m)

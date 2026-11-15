@@ -44,6 +44,9 @@ func newEnv(t *testing.T) *env {
 		Dispatch: dispatch.Deps{
 			HC: "hc", App: "herdr-app", Now: time.Now, Pause: func(time.Duration) {},
 			Exec: func(argv []string) dispatch.Result {
+				if argv[0] == "herdr-app" && argv[1] == "status" {
+					return dispatch.Result{}
+				}
 				if argv[0] == "herdr-app" {
 					var m map[string]any
 					json.Unmarshal([]byte(argv[3]), &m)

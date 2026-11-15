@@ -61,9 +61,10 @@ func screen() screenData {
 	next := now.Add(23 * time.Hour)
 	return screenData{
 		now: now, width: 100, height: 30, cursor: 1,
-		sched:  daemon.State{State: "live", Terminal: "t9"},
-		public: "https://box.tail1.ts.net",
-		config: tunnel.Config{Provider: "tailscale"},
+		sched:   daemon.State{State: "live", Terminal: "t9"},
+		public:  "https://box.tail1.ts.net",
+		backend: "cli",
+		config:  tunnel.Config{Provider: "tailscale"},
 		listing: view.Listing{Tasks: []view.Task{
 			{ID: "daily-review", Schedule: "weekdays at 09:00", Enabled: true, Agent: "claude", Model: "opus", Next: &next, Last: &view.Last{N: 12, Status: "done", FiredAt: now.Add(-time.Hour)}},
 			{ID: "grafana-alert", Schedule: "on webhook", Enabled: true, Agent: "codex", Last: &view.Last{N: 3, Status: "working", FiredAt: now.Add(-2 * time.Minute)}},
@@ -78,7 +79,7 @@ func screen() screenData {
 func TestRender(t *testing.T) {
 	out := render(screen())
 	for _, want := range []string{
-		"scheduler on", "https://box.tail1.ts.net",
+		"scheduler on", "runs in cli", "https://box.tail1.ts.net",
 		"ID", "TRIGGER", "STATUS",
 		"daily-review", "claude·opus", "tomorrow 09:00", "#12 done",
 		"#3 working", "○ off",

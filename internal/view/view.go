@@ -88,6 +88,26 @@ type Listing struct {
 	Error       string `json:"error,omitempty"`
 	PublicURL   string `json:"publicUrl,omitempty"`
 	PublicError string `json:"publicError,omitempty"`
+	Scheduler   string `json:"scheduler"`
+}
+
+const (
+	heartbeatKey   = "heartbeat"
+	heartbeatFresh = 20 * time.Second
+)
+
+func Unbeat(db *store.DB) { db.SetMeta(heartbeatKey, "") }
+
+func Beat(db *store.DB, now time.Time) {
+	db.SetMeta(heartbeatKey, now.UTC().Format(time.RFC3339))
+}
+
+func Scheduler(db *store.DB, now time.Time) string {
+	at, err := time.Parse(time.RFC3339, db.Meta(heartbeatKey))
+	if err != nil || now.Sub(at) > heartbeatFresh {
+		return "stopped"
+	}
+	return "live"
 }
 
 const (
@@ -111,7 +131,7 @@ func List(tasksFile string, db *store.DB, now time.Time) Listing {
 	if err != nil {
 		return Listing{Tasks: []Task{}, Error: err.Error()}
 	}
-	out := Listing{Tasks: []Task{}, PublicURL: db.Meta(PublicURLKey), PublicError: db.Meta(PublicErrorKey)}
+	out := Listing{Tasks: []Task{}, PublicURL: db.Meta(PublicURLKey), PublicError: db.Meta(PublicErrorKey), Scheduler: Scheduler(db, now)}
 	for _, t := range f.Tasks {
 		v := Task{ID: t.ID, Title: t.Title, Schedule: Describe(t.Schedule), Enabled: t.Enabled, Agent: t.Agent, Model: t.Model}
 		if t.Enabled {
