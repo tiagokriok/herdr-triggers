@@ -2,7 +2,7 @@
 
 **Cron, one-off and webhook triggers for any coding agent in [Herdr](https://herdr.dev): the desktop app, the `herdr` CLI, your laptop, a VPS or a homelab.**
 
-A Grafana alert, a ClickUp task or a cron line opens a new space (app) or workspace (CLI) with Claude Code, Codex, Pi or OpenCode in your repo, with the prompt (and the webhook body) as its first message. One Go binary that runs as a user service, a JSON task file, a TUI to edit it and a side panel in the app.
+A Grafana alert, a Linear issue or a cron line opens a new space (app) or workspace (CLI) with Claude Code, Codex, Pi or OpenCode in your repo, with the prompt (and the webhook body) as its first message. One Go binary that runs as a user service, a JSON task file, a TUI to edit it and a side panel in the app.
 
 ![Triggers panel](mods/triggers/preview.png)
 
@@ -95,7 +95,7 @@ herdr-triggers public [provider [x]]  # how webhooks reach you (see below)
 curl -X POST https://<public url>/hooks/grafana-alert/<token> -d '{"alert":"cpu"}'
 ```
 
-The token can be the last path segment (one URL to paste in Grafana, ClickUp, GitHub), or go in `Authorization: Bearer`, `X-Triggers-Token` or `?token=`. Replies: `202 {"task","run"}`, `401` bad token, `404` no enabled webhook task, `409` previous run still active, `413` body over 64 KB. In the TUI, `c` copies a task's full URL.
+The token can be the last path segment (one URL to paste in Grafana, Linear, GitHub), or go in `Authorization: Bearer`, `X-Triggers-Token` or `?token=`. Replies: `202 {"task","run"}`, `401` bad token, `404` no enabled webhook task, `409` previous run still active, `413` body over 64 KB. In the TUI, `c` copies a task's full URL.
 
 #### Public URL
 
