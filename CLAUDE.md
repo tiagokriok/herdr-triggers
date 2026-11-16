@@ -8,3 +8,17 @@ Go module, one binary (`cmd/herdr-triggers`). Tests: `go test -race ./...`, `go 
 - `mods/triggers`: Herdr app panel mod (gpui-kit JS, no DOM/Node/setTimeout; types in `~/.config/herdr-app/*.d.ts`). Talks only to the binary via `exec` (`~/.config/herdr-triggers/cli.json`). Check with `herdr-app check`. `RECIPE.md` + `preview.png` for herdr.dev/mods.
 - `skills/schedule-local`: agent skill editing `~/.config/herdr-triggers/tasks.json`.
 - Deps: gronx (cron), modernc sqlite, bubbletea/huh/lipgloss. Add others only with a reason. No code comments. Conventional commits. Public repo: keep user-specific paths and names out.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `tiagokriok/herdr-triggers` via `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the root, created lazily. See `docs/agents/domain.md`.
