@@ -3,9 +3,9 @@ package webhook
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
