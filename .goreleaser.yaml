@@ -23,3 +23,19 @@ checksum:
 
 changelog:
   use: github
+
+homebrew_casks:
+  - name: herdr-triggers
+    repository:
+      owner: tiagokriok
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/tiagokriok/herdr-triggers
+    description: Cron, one-off and webhook triggers for coding agents in Herdr
+    license: MIT
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/herdr-triggers"]
+          end
