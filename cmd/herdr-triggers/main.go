@@ -10,14 +10,19 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	herdrtriggers "github.com/tiagokriok/herdr-triggers"
 	"github.com/tiagokriok/herdr-triggers/internal/app"
 	"github.com/tiagokriok/herdr-triggers/internal/config"
 	"github.com/tiagokriok/herdr-triggers/internal/daemon"
+	"github.com/tiagokriok/herdr-triggers/internal/dispatch"
+	"github.com/tiagokriok/herdr-triggers/internal/panel"
 	"github.com/tiagokriok/herdr-triggers/internal/runtime"
 	"github.com/tiagokriok/herdr-triggers/internal/schedule"
 	"github.com/tiagokriok/herdr-triggers/internal/service"
@@ -48,10 +53,31 @@ const usage = `herdr-triggers: scheduled and webhook-triggered agent runs for th
                          (auto: the app when installed); restart to apply
   keep [n]               runs and deliveries kept per task (default 50, 0 = unlimited)
   updates [on|off]       daily check for a new release (TRIGGERS_NO_UPDATE_CHECK=1 also turns it off)
+  mod install [--keys]   install the Triggers panel in the Herdr app (--keys: bind ctrl-shift-y)
+  mod uninstall          remove it
+  skill install [dir]    install the schedule-local agent skill (default ~/.claude/skills)
   version                print the version
 `
 
 const tick = 5 * time.Second
+
+var execFn dispatch.Exec = runtime.Exec
+
+func serviceDeps() (service.Deps, error) {
+	d, err := runtime.ServiceDeps()
+	d.Exec = execFn
+	return d, err
+}
+
+func refreshPanel(home string) {
+	refreshed, err := panel.Refresh(herdrtriggers.Assets, home)
+	switch {
+	case err != nil:
+		fmt.Println("panel not refreshed:", err)
+	case refreshed:
+		fmt.Println("panel refreshed")
+	}
+}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -187,8 +213,66 @@ func run(args []string) error {
 		}
 		fmt.Println("update check:", state)
 		return nil
+	case "mod":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		switch {
+		case has(rest, "install"):
+			if err := panel.Install(herdrtriggers.Assets, home); err != nil {
+				return err
+			}
+			dd, err := runtime.DaemonDeps(p)
+			if err != nil {
+				return err
+			}
+			if err := daemon.WriteCLI(dd); err != nil {
+				return err
+			}
+			fmt.Println("panel installed in", panel.Dir(home))
+			if res := execFn([]string{runtime.App(), "check", panel.Dir(home)}); res.Code != 0 {
+				fmt.Println("herdr-app check failed:", strings.TrimSpace(res.Stderr+res.Stdout))
+			}
+			if has(rest, "--keys") {
+				msg, err := panel.Bind(home)
+				if err != nil {
+					return err
+				}
+				fmt.Println(msg)
+			} else {
+				fmt.Printf("open it with: herdr-app do mod.open '{\"name\":\"triggers\"}'\nkey: add %s to \"global\" in %s, or run mod install --keys\n", panel.Binding, panel.KeysFile(home))
+			}
+			return nil
+		case has(rest, "uninstall"):
+			if err := panel.Uninstall(home); err != nil {
+				return err
+			}
+			fmt.Println("panel removed")
+			return nil
+		}
+		return errors.New("mod install [--keys] | uninstall")
+	case "skill":
+		if len(rest) == 0 || rest[0] != "install" {
+			return errors.New("skill install [dir]")
+		}
+		dir := ""
+		if len(rest) > 1 {
+			dir = rest[1]
+		} else {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			dir = filepath.Join(home, ".claude", "skills")
+		}
+		file, err := panel.InstallSkill(herdrtriggers.Assets, dir)
+		if err == nil {
+			fmt.Println("skill installed:", file)
+		}
+		return err
 	case "service":
-		d, err := runtime.ServiceDeps()
+		d, err := serviceDeps()
 		if err != nil {
 			return err
 		}
@@ -207,11 +291,13 @@ func run(args []string) error {
 			msg, err := service.Install(d)
 			if err == nil {
 				fmt.Println(msg)
+				refreshPanel(d.Home)
 			}
 			return err
 		case has(rest, "uninstall"):
 			return service.Uninstall(d)
 		case has(rest, "restart"):
+			refreshPanel(d.Home)
 			return service.Restart(d)
 		}
 		return errors.New("service install | uninstall | restart")

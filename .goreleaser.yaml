@@ -17,8 +17,6 @@ archives:
     files:
       - README.md
       - LICENSE
-      - mods/triggers/*
-      - skills/schedule-local/*
 
 checksum:
   name_template: checksums.txt
