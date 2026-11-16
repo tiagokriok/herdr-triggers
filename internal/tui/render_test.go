@@ -11,6 +11,7 @@ import (
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/task"
 	"github.com/tiagokriok/herdr-triggers/internal/tunnel"
+	"github.com/tiagokriok/herdr-triggers/internal/update"
 	"github.com/tiagokriok/herdr-triggers/internal/view"
 )
 
@@ -145,5 +146,24 @@ func TestRenderWideKeepsColumnsClose(t *testing.T) {
 	head := strings.Split(render(s), "\n")[2]
 	if i := strings.Index(head, "TRIGGER"); i > 40 {
 		t.Fatalf("TRIGGER at %d: %q", i, head)
+	}
+}
+
+func TestRenderUpdate(t *testing.T) {
+	s := screen()
+	if strings.Contains(render(s), "available") {
+		t.Fatal("update banner without an update")
+	}
+	s.listing.Update = &update.Info{Latest: "v0.3.0", Command: update.BrewCommand}
+	out := render(s)
+	for _, want := range []string{"v0.3.0 available", "brew upgrade --cask herdr-triggers"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	for i, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > 100 {
+			t.Errorf("line %d is %d wide: %q", i, w, line)
+		}
 	}
 }

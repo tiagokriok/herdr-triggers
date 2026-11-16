@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
 	"strings"
 	"syscall"
@@ -17,6 +19,7 @@ import (
 	"github.com/tiagokriok/herdr-triggers/internal/dispatch"
 	"github.com/tiagokriok/herdr-triggers/internal/service"
 	"github.com/tiagokriok/herdr-triggers/internal/store"
+	"github.com/tiagokriok/herdr-triggers/internal/update"
 )
 
 func Exec(argv []string) dispatch.Result {
@@ -77,6 +80,26 @@ func Herdr(session string) []string {
 	return argv
 }
 
+var Version = "dev"
+
+func UpdateInfo(a *app.App) *update.Info {
+	if !a.UpdateCheck {
+		return nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	return update.Available(a.DB, a.Version, exe, os.Getenv)
+}
+
+func fetchLatest() (string, error) {
+	return update.Fetch(&http.Client{Timeout: 5 * time.Second}, update.LatestURL)
+}
+
 func NewApp(p store.Paths) (*app.App, error) {
 	cfg, err := config.Load(p.Config)
 	if err != nil {
@@ -89,6 +112,7 @@ func NewApp(p store.Paths) (*app.App, error) {
 	db.Keep = cfg.Keep()
 	return &app.App{
 		Tasks: p.Tasks, DB: db, Log: Log, Notify: Notify,
+		Version: Version, UpdateCheck: update.Enabled(cfg.Updates(), Version, os.Getenv), FetchLatest: fetchLatest,
 		Dispatch: dispatch.Deps{
 			Exec: Exec, Spawn: Spawn, Backend: cfg.ResolveBackend(exec.LookPath), Herdr: Herdr(cfg.Session),
 			HC: HC(), App: App(), Now: time.Now, Pause: time.Sleep,

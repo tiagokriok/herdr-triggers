@@ -37,6 +37,7 @@ export default class Triggers extends View {
     this.tasks = [];
     this.scheduler = null;
     this.problem = null;
+    this.update = null;
     this.busy = {};
     cx.timer.every(POLL_MS, (cx) => this.refresh(cx));
     this.refresh(cx);
@@ -61,6 +62,7 @@ export default class Triggers extends View {
         const [list, status] = await Promise.all([this.cli(["list", "--json"]), this.cli(["status", "--json"])]);
         const view = JSON.parse(list);
         this.tasks = view.tasks;
+        this.update = view.update ?? null;
         this.scheduler = JSON.parse(status);
         this.problem = view.error ? `tasks.json: ${view.error}` : null;
       } catch (e) {
@@ -131,7 +133,7 @@ export default class Triggers extends View {
   empty() {
     const t = theme();
     const text = this.problem === "setup"
-      ? "herdr-triggers isn't set up. Install the herdr-triggers binary and run `herdr-triggers start` once. It writes ~/.config/herdr-triggers/cli.json, which this panel reads."
+      ? "herdr-triggers isn't set up. Install the herdr-triggers binary and run `herdr-triggers mod install` (or `service install`). It writes ~/.config/herdr-triggers/cli.json, which this panel reads."
       : this.problem ?? "No tasks yet. Add one with `herdr-triggers tui`, or ask your agent to use the schedule-local skill.";
     return div().p(12).text_size(12).text_color(t.muted).child(text);
   }
@@ -143,6 +145,9 @@ export default class Triggers extends View {
       .child(this.header())
       .when(Boolean(this.problem) && this.tasks.length > 0, (el) =>
         el.child(div().px(12).py(6).text_size(11.5).text_color(t.blocked).child(this.problem)))
+      .when(Boolean(this.update), (el) =>
+        el.child(div().px(12).py(6).border_b(1).border_color(t.border).text_size(11.5).text_color(t.muted)
+          .child(`${this.update.latest} available: ${this.update.command}`)))
       .child(v_flex().flex_1().min_h(0).overflow_y_scrollbar().child(body));
   }
 }

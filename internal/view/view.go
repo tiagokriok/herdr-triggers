@@ -10,6 +10,7 @@ import (
 	"github.com/tiagokriok/herdr-triggers/internal/schedule"
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/task"
+	"github.com/tiagokriok/herdr-triggers/internal/update"
 )
 
 var (
@@ -84,11 +85,12 @@ type Task struct {
 }
 
 type Listing struct {
-	Tasks       []Task `json:"tasks"`
-	Error       string `json:"error,omitempty"`
-	PublicURL   string `json:"publicUrl,omitempty"`
-	PublicError string `json:"publicError,omitempty"`
-	Scheduler   string `json:"scheduler"`
+	Tasks       []Task       `json:"tasks"`
+	Error       string       `json:"error,omitempty"`
+	PublicURL   string       `json:"publicUrl,omitempty"`
+	PublicError string       `json:"publicError,omitempty"`
+	Scheduler   string       `json:"scheduler"`
+	Update      *update.Info `json:"update"`
 }
 
 const pidKey = "scheduler_pid"

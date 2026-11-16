@@ -78,6 +78,7 @@ func Run(p store.Paths, a *app.App) error {
 
 func (m *model) reload() {
 	m.listing = view.List(m.paths.Tasks, m.app.DB, time.Now())
+	m.listing.Update = runtime.UpdateInfo(m.app)
 	m.sched = daemon.Status(m.daemon)
 	m.sched.State = m.listing.Scheduler
 	cfg, _ := config.Load(m.paths.Config)

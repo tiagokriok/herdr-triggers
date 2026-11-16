@@ -29,6 +29,7 @@ import (
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/tui"
 	"github.com/tiagokriok/herdr-triggers/internal/tunnel"
+	"github.com/tiagokriok/herdr-triggers/internal/update"
 	"github.com/tiagokriok/herdr-triggers/internal/view"
 	"github.com/tiagokriok/herdr-triggers/internal/webhook"
 )
@@ -120,6 +121,8 @@ func run(args []string) error {
 		fmt.Println(versionString(version, info))
 		return nil
 	}
+	info, _ := debug.ReadBuildInfo()
+	runtime.Version = versionString(version, info)
 	p, err := runtime.Paths()
 	if err != nil {
 		return err
@@ -347,10 +350,17 @@ func run(args []string) error {
 		if service.Installed(sd) {
 			st.Mode = "service"
 		}
+		if a, err := runtime.NewApp(p); err == nil {
+			st.Update = runtime.UpdateInfo(a)
+			a.DB.Close()
+		}
 		if has(rest, "--json") {
 			return printJSON(st)
 		}
 		fmt.Println(st.State, st.Mode, "backend:"+st.Backend, st.Terminal)
+		if st.Update != nil {
+			fmt.Printf("%s available: %s\n", st.Update.Latest, st.Update.Command)
+		}
 		return nil
 	}
 
@@ -380,6 +390,7 @@ func run(args []string) error {
 	switch cmd {
 	case "list":
 		l := view.List(p.Tasks, a.DB, time.Now())
+		l.Update = runtime.UpdateInfo(a)
 		if has(rest, "--json") {
 			return printJSON(l)
 		}
@@ -438,10 +449,11 @@ func clearPublic(a *app.App) {
 }
 
 type status struct {
-	State    string `json:"state"`
-	Mode     string `json:"mode"`
-	Backend  string `json:"backend"`
-	Terminal string `json:"terminal,omitempty"`
+	State    string       `json:"state"`
+	Mode     string       `json:"mode"`
+	Backend  string       `json:"backend"`
+	Terminal string       `json:"terminal,omitempty"`
+	Update   *update.Info `json:"update"`
 }
 
 func expose(a *app.App, p store.Paths) func() {

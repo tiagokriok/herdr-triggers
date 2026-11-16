@@ -47,7 +47,7 @@ func TestList(t *testing.T) {
 	db.SetMeta(PublicURLKey, "https://box.ts.net")
 	got, _ := json.Marshal(List(tasks, db, time.Date(2026, 11, 14, 10, 0, 0, 0, time.UTC)))
 	want := `{"tasks":[{"id":"daily","title":"Daily","schedule":"daily at 09:00","enabled":true,"agent":"pi","model":"m1","next":"2026-11-15T09:00:00Z","last":{"n":1,"status":"blocked","firedAt":"2026-11-14T09:00:00Z","space":"sp2","terminal":"t2"}},` +
-		`{"id":"paused","title":"Paused","schedule":"weekdays at 18:30","enabled":false,"agent":"claude","model":"","next":null,"last":null}],"publicUrl":"https://box.ts.net","scheduler":"stopped"}`
+		`{"id":"paused","title":"Paused","schedule":"weekdays at 18:30","enabled":false,"agent":"claude","model":"","next":null,"last":null}],"publicUrl":"https://box.ts.net","scheduler":"stopped","update":null}`
 	if string(got) != want {
 		t.Fatalf("\n got %s\nwant %s", got, want)
 	}

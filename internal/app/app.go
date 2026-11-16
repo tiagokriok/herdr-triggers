@@ -13,6 +13,7 @@ import (
 	"github.com/tiagokriok/herdr-triggers/internal/schedule"
 	"github.com/tiagokriok/herdr-triggers/internal/store"
 	"github.com/tiagokriok/herdr-triggers/internal/task"
+	"github.com/tiagokriok/herdr-triggers/internal/update"
 )
 
 type App struct {
@@ -24,6 +25,10 @@ type App struct {
 	cache    *store.TaskCache
 	lastErr  string
 	known    string
+
+	Version     string
+	UpdateCheck bool
+	FetchLatest func() (string, error)
 }
 
 var (
@@ -92,6 +97,7 @@ func (a *App) Step(prev schedule.State) (schedule.State, []<-chan store.Run) {
 	}
 	a.lastErr = ""
 	a.forget(f.Tasks)
+	a.checkUpdate()
 	plan := schedule.Plan(f.Tasks, prev, a.Dispatch.Now())
 	for _, m := range plan.Missed {
 		a.Log(fmt.Sprintf("missed %s %s", m.Task.ID, stamp(m.At)))
@@ -116,6 +122,18 @@ func (a *App) Step(prev schedule.State) (schedule.State, []<-chan store.Run) {
 		runs = append(runs, ch)
 	}
 	return plan.State, runs
+}
+
+func (a *App) checkUpdate() {
+	if !a.UpdateCheck || a.FetchLatest == nil || !update.Due(a.DB, a.Dispatch.Now()) {
+		return
+	}
+	latest, err := a.FetchLatest()
+	if err != nil {
+		a.Log("update check: " + err.Error())
+		latest = ""
+	}
+	update.Record(a.DB, a.Dispatch.Now(), latest)
 }
 
 func (a *App) forget(tasks []task.Task) {

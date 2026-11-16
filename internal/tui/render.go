@@ -188,6 +188,9 @@ func header(s screenData) []string {
 	if s.publicErr != "" {
 		lines = append(lines, fit(red.Render("public url failed: "+s.publicErr), s.width))
 	}
+	if u := s.listing.Update; u != nil {
+		lines = append(lines, fit(yellow.Render(u.Latest+" available")+dim.Render(" · "+u.Command), s.width))
+	}
 	return lines
 }
 
