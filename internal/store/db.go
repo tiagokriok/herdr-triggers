@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,10 @@ type Delivery struct {
 	RunN       int       `json:"runN,omitempty"`
 }
 
-type DB struct{ sql *sql.DB }
+type DB struct {
+	sql  *sql.DB
+	Keep int
+}
 
 const schema = `
 CREATE TABLE IF NOT EXISTS runs (
@@ -88,7 +92,7 @@ func Open(path string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
-	return &DB{db}, nil
+	return &DB{sql: db}, nil
 }
 
 func (d *DB) Close() error { return d.sql.Close() }
@@ -108,6 +112,12 @@ func (d *DB) Reserve(taskID string, firedAt time.Time, status string) (Run, erro
 	r := Run{TaskID: taskID, N: n, FiredAt: firedAt.UTC(), Status: status}
 	if _, err := tx.Exec(`INSERT INTO runs (task_id, n, fired_at, status) VALUES (?, ?, ?, ?)`, taskID, n, r.FiredAt.Format(stamp), status); err != nil {
 		return Run{}, err
+	}
+	if d.Keep > 0 {
+		if _, err := tx.Exec(`DELETE FROM runs WHERE task_id = ? AND status NOT IN ('starting', 'working', 'blocked')
+AND n NOT IN (SELECT n FROM runs WHERE task_id = ? ORDER BY n DESC LIMIT ?)`, taskID, taskID, d.Keep); err != nil {
+			return Run{}, err
+		}
 	}
 	return r, tx.Commit()
 }
@@ -178,9 +188,41 @@ func (d *DB) HasRun(taskID string) (bool, error) {
 }
 
 func (d *DB) AddDelivery(x Delivery) error {
-	_, err := d.sql.Exec(`INSERT INTO deliveries (task_id, received_at, bytes, outcome, run_n) VALUES (?, ?, ?, ?, ?)`,
-		x.TaskID, x.ReceivedAt.UTC().Format(stamp), x.Bytes, x.Outcome, x.RunN)
-	return err
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO deliveries (task_id, received_at, bytes, outcome, run_n) VALUES (?, ?, ?, ?, ?)`,
+		x.TaskID, x.ReceivedAt.UTC().Format(stamp), x.Bytes, x.Outcome, x.RunN); err != nil {
+		return err
+	}
+	if d.Keep > 0 {
+		if _, err := tx.Exec(`DELETE FROM deliveries WHERE task_id = ? AND id NOT IN (SELECT id FROM deliveries WHERE task_id = ? ORDER BY id DESC LIMIT ?)`,
+			x.TaskID, x.TaskID, d.Keep); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (d *DB) ForgetExcept(ids []string) error {
+	keep, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	tx, err := d.sql.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`DELETE FROM runs WHERE task_id NOT IN (SELECT value FROM json_each(?)) AND status NOT IN ('starting', 'working', 'blocked')`, string(keep)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM deliveries WHERE task_id NOT IN (SELECT value FROM json_each(?))`, string(keep)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (d *DB) Deliveries(taskID string, limit int) ([]Delivery, error) {

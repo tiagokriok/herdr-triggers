@@ -20,10 +20,27 @@ var (
 )
 
 type Config struct {
-	Backend string        `json:"backend,omitempty"`
-	Session string        `json:"session,omitempty"`
-	Public  tunnel.Config `json:"public"`
+	Backend     string        `json:"backend,omitempty"`
+	Session     string        `json:"session,omitempty"`
+	Public      tunnel.Config `json:"public"`
+	KeepRuns    *int          `json:"keepRuns,omitempty"`
+	UpdateCheck *bool         `json:"updateCheck,omitempty"`
 }
+
+const DefaultKeep = 50
+
+func (c Config) Keep() int {
+	if c.KeepRuns == nil {
+		return DefaultKeep
+	}
+	return *c.KeepRuns
+}
+
+func (c *Config) SetKeep(n int) { c.KeepRuns = &n }
+
+func (c Config) Updates() bool { return c.UpdateCheck == nil || *c.UpdateCheck }
+
+func (c *Config) SetUpdates(on bool) { c.UpdateCheck = &on }
 
 func (c *Config) defaults() {
 	if c.Backend == "" {
@@ -41,6 +58,9 @@ func (c Config) Validate() error {
 	}
 	if c.Session != "" && !sessionPattern.MatchString(c.Session) {
 		return errors.New("session: letters, digits, - and _ only")
+	}
+	if c.Keep() < 0 {
+		return errors.New("keepRuns must be 0 (unlimited) or more")
 	}
 	if err := c.Public.Validate(); err != nil {
 		return fmt.Errorf("public: %w", err)

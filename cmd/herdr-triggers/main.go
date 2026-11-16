@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"runtime/debug"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -45,6 +46,8 @@ const usage = `herdr-triggers: scheduled and webhook-triggered agent runs for th
   backend [auto|app|cli] [session]
                          where runs open: the Herdr app, or the herdr CLI server
                          (auto: the app when installed); restart to apply
+  keep [n]               runs and deliveries kept per task (default 50, 0 = unlimited)
+  updates [on|off]       daily check for a new release (TRIGGERS_NO_UPDATE_CHECK=1 also turns it off)
   version                print the version
 `
 
@@ -140,6 +143,49 @@ func run(args []string) error {
 			return err
 		}
 		fmt.Println("saved; restart the scheduler to apply")
+		return nil
+	case "keep":
+		cfg, err := config.Load(p.Config)
+		if err != nil {
+			return err
+		}
+		if len(rest) > 0 {
+			n, err := strconv.Atoi(rest[0])
+			if err != nil {
+				return fmt.Errorf("keep: %q is not a number", rest[0])
+			}
+			cfg.SetKeep(n)
+			if err := config.Save(p.Config, cfg); err != nil {
+				return err
+			}
+		}
+		if cfg.Keep() == 0 {
+			fmt.Println("keep: unlimited runs and deliveries per task")
+		} else {
+			fmt.Printf("keep: last %d runs and deliveries per task\n", cfg.Keep())
+		}
+		return nil
+	case "updates":
+		cfg, err := config.Load(p.Config)
+		if err != nil {
+			return err
+		}
+		if len(rest) > 0 {
+			switch rest[0] {
+			case "on", "off":
+				cfg.SetUpdates(rest[0] == "on")
+			default:
+				return fmt.Errorf("updates: on or off")
+			}
+			if err := config.Save(p.Config, cfg); err != nil {
+				return err
+			}
+		}
+		state := "on"
+		if !cfg.Updates() {
+			state = "off"
+		}
+		fmt.Println("update check:", state)
 		return nil
 	case "service":
 		d, err := runtime.ServiceDeps()

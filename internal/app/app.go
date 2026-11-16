@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/tiagokriok/herdr-triggers/internal/dispatch"
@@ -22,6 +23,7 @@ type App struct {
 	Notify   func(title, body string)
 	cache    *store.TaskCache
 	lastErr  string
+	known    string
 }
 
 var (
@@ -89,6 +91,7 @@ func (a *App) Step(prev schedule.State) (schedule.State, []<-chan store.Run) {
 		return prev, nil
 	}
 	a.lastErr = ""
+	a.forget(f.Tasks)
 	plan := schedule.Plan(f.Tasks, prev, a.Dispatch.Now())
 	for _, m := range plan.Missed {
 		a.Log(fmt.Sprintf("missed %s %s", m.Task.ID, stamp(m.At)))
@@ -113,6 +116,23 @@ func (a *App) Step(prev schedule.State) (schedule.State, []<-chan store.Run) {
 		runs = append(runs, ch)
 	}
 	return plan.State, runs
+}
+
+func (a *App) forget(tasks []task.Task) {
+	ids := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		ids = append(ids, t.ID)
+	}
+	slices.Sort(ids)
+	key := "ids:" + strings.Join(ids, "\n")
+	if key == a.known {
+		return
+	}
+	if err := a.DB.ForgetExcept(ids); err != nil {
+		a.Log("forget removed tasks: " + err.Error())
+		return
+	}
+	a.known = key
 }
 
 func (a *App) Reconcile() []<-chan store.Run {

@@ -86,6 +86,7 @@ func NewApp(p store.Paths) (*app.App, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.Keep = cfg.Keep()
 	return &app.App{
 		Tasks: p.Tasks, DB: db, Log: Log, Notify: Notify,
 		Dispatch: dispatch.Deps{
