@@ -20,23 +20,25 @@ A Grafana alert, a Linear issue or a cron line opens a new space (app) or worksp
 Requires Herdr: the desktop app (`herdr-app`, `herdr-core`/`hc`) or the CLI (`herdr`), or both. Linux or macOS, amd64 or arm64.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tiagokriok/herdr-triggers/main/install.sh | sh
+brew install --cask tiagokriok/tap/herdr-triggers                                # macOS
+curl -fsSL https://raw.githubusercontent.com/tiagokriok/herdr-triggers/main/install.sh | sh   # Linux or macOS
 herdr-triggers service install             # scheduler + webhooks + tunnel, started on login
 ```
 
-The script downloads the latest [release](https://github.com/tiagokriok/herdr-triggers/releases), checks its SHA-256, installs the binary to `~/.local/bin` (`BIN_DIR`) and the panel and skill to `~/.local/share/herdr-triggers` (`XDG_DATA_HOME`). `VERSION=v0.1.0` pins a release. Run it again to update, then `herdr-triggers service restart`.
+The script downloads the latest [release](https://github.com/tiagokriok/herdr-triggers/releases), checks its SHA-256 and installs the binary to `~/.local/bin` (`BIN_DIR`). `VERSION=v0.2.0` pins a release. Or build it with Go 1.26+: `go install github.com/tiagokriok/herdr-triggers/cmd/herdr-triggers@latest`.
 
-Or download an archive from the releases page, or build it with Go 1.26+: `go install github.com/tiagokriok/herdr-triggers/cmd/herdr-triggers@latest`.
-
-Desktop app panel (optional):
+The binary carries the app panel and the agent skill:
 
 ```sh
-cp -r ~/.local/share/herdr-triggers/mods/triggers ~/.config/herdr-app/mods/
-herdr-app check ~/.config/herdr-app/mods/triggers
-herdr-app do mod.open '{"name":"triggers"}'   # toggle it as a floating panel
+herdr-triggers mod install --keys          # Triggers panel in the Herdr app, ctrl-shift-y toggles it
+herdr-triggers skill install               # /schedule-local for Claude Code (or: skill install <skills dir>)
 ```
 
-To toggle it with a key, add `"ctrl-shift-y": "mod.open:triggers"` to `global` in `~/.config/herdr-app/keys.json`.
+`mod install` copies the panel to `~/.config/herdr-app/mods/triggers`, writes `~/.config/herdr-triggers/cli.json` (how the panel finds the binary) and runs `herdr-app check`. `--keys` binds `ctrl-shift-y` only when the key is free. `service install`/`restart` refresh a panel installed this way after an upgrade; `mod uninstall` removes it and the key. Open it without the key: `herdr-app do mod.open '{"name":"triggers"}'`.
+
+#### Updates
+
+Once a day the scheduler asks GitHub for the latest release. When there is a newer one, `status`, the TUI and the panel show it with the upgrade command for how you installed it (`brew upgrade --cask`, the install script again, or `go install`), followed by `service restart`. It never updates itself. Turn it off with `herdr-triggers updates off` or `TRIGGERS_NO_UPDATE_CHECK=1`.
 
 `service install` writes a systemd user unit (`~/.config/systemd/user/herdr-triggers.service`, logs with `journalctl --user -u herdr-triggers`) or a launchd agent (`~/Library/LaunchAgents/dev.herdr.triggers.plist`). It copies your `PATH` and `CLAUDE_CONFIG_DIR` into it, so reinstall after changing them. `service restart` applies config changes; `service uninstall` removes it. It also writes `~/.config/herdr-triggers/cli.json`, which the panel reads to find the binary.
 
@@ -62,8 +64,6 @@ sudo loginctl enable-linger $USER          # keep user services running without 
 
 Log in to your agents once on the server (`claude`, `codex login`, ...) so a run never stops at a login screen.
 
-Optional skill for agents (`/schedule-local`): `ln -sfn ~/.local/share/herdr-triggers/skills/schedule-local ~/.claude/skills/schedule-local`.
-
 ## Use
 
 ![TUI](docs/tui.png)
@@ -79,13 +79,18 @@ herdr-triggers backend [auto|app|cli] [session]
 herdr-triggers start | stop     # scheduler in an app space instead of a service
 herdr-triggers token            # a random webhook token
 herdr-triggers public [provider [x]]  # how webhooks reach you (see below)
+herdr-triggers keep [n]         # runs and deliveries kept per task (default 50, 0 = all)
+herdr-triggers updates [on|off] # daily release check
+herdr-triggers mod install [--keys] | mod uninstall
+herdr-triggers skill install [dir]
 herdr-triggers version
 ```
 
 - Tasks: `~/.config/herdr-triggers/tasks.json` (format in `skills/schedule-local/SKILL.md`), re-read every 5 s. Edit it by hand, with the TUI, or let an agent use the skill.
 - Config: `~/.config/herdr-triggers/config.json`: `{"backend": "auto", "session": "", "public": {"provider": "none"}}`.
 - State: `~/.local/state/herdr-triggers/state.db` (SQLite: runs and webhook deliveries).
-- Env: `TRIGGERS_ADDR` (default `127.0.0.1:8787`), `TRIGGERS_HC`, `TRIGGERS_APP`, `TRIGGERS_HERDR`, `CLAUDE_CONFIG_DIR` (forwarded to claude runs).
+- History: the last `keepRuns` (default 50) runs and webhook deliveries of each task are kept, trimmed on each write; active runs are never trimmed. A task removed from `tasks.json` loses its history.
+- Env: `TRIGGERS_ADDR` (default `127.0.0.1:8787`), `TRIGGERS_HC`, `TRIGGERS_APP`, `TRIGGERS_HERDR`, `TRIGGERS_NO_UPDATE_CHECK`, `CLAUDE_CONFIG_DIR` (forwarded to claude runs).
 
 ### Webhooks
 
@@ -99,7 +104,15 @@ herdr-triggers version
 curl -X POST https://<public url>/hooks/grafana-alert/<token> -d '{"alert":"cpu"}'
 ```
 
-The token can be the last path segment (one URL to paste in Grafana, Linear, GitHub), or go in `Authorization: Bearer`, `X-Triggers-Token` or `?token=`. Replies: `202 {"task","run"}`, `401` bad token, `404` no enabled webhook task, `409` previous run still active, `413` body over 64 KB. In the TUI, `c` copies a task's full URL.
+The token can be the last path segment (one URL to paste in Grafana, Linear, GitHub), or go in `Authorization: Bearer`, `X-Triggers-Token` or `?token=`. Replies: `202 {"task","run"}`, `404` unknown or disabled task, bad token or bad signature (all alike, so task ids can't be probed; the delivery log keeps the real reason), `409` previous run still active, `413` body over 64 KB. In the TUI, `c` copies a task's full URL.
+
+When the sender signs its requests, add a `signature` to the schedule; the body is then checked with HMAC-SHA256 too. The TUI has GitHub and Linear presets.
+
+| sender | `signature` |
+|---|---|
+| GitHub | `{"secret": "<s>", "header": "X-Hub-Signature-256", "encoding": "hex", "prefix": "sha256="}` |
+| Linear | `{"secret": "<s>", "header": "Linear-Signature", "encoding": "hex"}` |
+| other | your header, `hex` (default) or `base64`, optional `prefix` |
 
 #### Public URL
 
@@ -118,8 +131,9 @@ Random URLs (ngrok without a domain, cloudflared) change on every scheduler rest
 ### What this does on your machine
 
 - The scheduler runs as a user service (or in a Herdr app space) and runs `herdr-app` and `hc`, or `herdr`, each task's agent, and `notify-send` (`osascript` on macOS) for alerts. It may launch the app or `herdr server` when they are not running.
-- It writes `~/.config/herdr-triggers/` (only when you or the TUI change tasks or config, and `cli.json` on `start`/`service install`), `~/.local/state/herdr-triggers/`, and the service unit on `service install`.
+- It writes `~/.config/herdr-triggers/` (only when you or the TUI change tasks or config, and `cli.json` on `start`/`service install`/`mod install`), `~/.config/herdr-app/mods/triggers` and `keys.json` only on `mod install`, `~/.local/state/herdr-triggers/`, and the service unit on `service install`.
 - It opens one HTTP port, on `127.0.0.1` only, and, if you choose a provider, starts `tailscale funnel`, `ngrok` or `cloudflared` to expose it.
+- Its only outgoing request is the daily `GET api.github.com/repos/tiagokriok/herdr-triggers/releases/latest` (`updates off` stops it).
 - The **mod runs programs** with `exec`: the `herdr-triggers` binary named in `~/.config/herdr-triggers/cli.json`, which it reads from outside its own folder. It changes `tasks.json` only when you press Enable/Disable. It does not use the network.
 
 ## Similar projects
@@ -129,7 +143,7 @@ Random URLs (ngrok without a domain, cloudflared) change on every scheduler rest
 
 ## Dev
 
-`go test -race ./...`, `go vet ./...`. Release: push a `v*` tag; GitHub Actions runs the tests and GoReleaser (`.goreleaser.yaml`) publishes the archives and `checksums.txt`. Design notes: `docs/design.md`. Mod brief: `mods/triggers/RECIPE.md`.
+`go test -race ./...`, `go vet ./...`. Release: push a `v*` tag; GitHub Actions runs the tests and GoReleaser (`.goreleaser.yaml`) publishes the archives, `checksums.txt` and the cask in `tiagokriok/homebrew-tap` (needs the `HOMEBREW_TAP_TOKEN` secret). Design notes: `docs/design.md`. Mod brief: `mods/triggers/RECIPE.md`.
 
 ## License
 

@@ -9,13 +9,14 @@ A side panel listing the local agent triggers of this machine (cron, once and we
 Top to bottom, in a 320px column docked right (`mod.json`: `place: "right"`, `size: 320`; opened with `mod.open`, a 360×600 floating panel: `overlay: {width: 360, height: 600}`), background `theme().surface`, text 12.5px `theme().foreground`:
 
 1. **Header**, 38px, bottom border `theme().border`: a 14px alarm-clock icon (`icon.svg`, tinted `muted`), "Triggers" in semibold, then on the right a 7px dot and "scheduler live" (dot `done`) or "scheduler stopped" (dot `dim`), in 11.5px `muted`. While stopped, a "Start" button follows.
-2. **Problem line** (only when there are tasks and something failed): 11.5px in `blocked`, e.g. a `tasks.json` validation error.
-3. **Task rows**, scrolling (`overflow_y_scrollbar`), each 12px side padding, 9px vertical, bottom border:
+2. **Update line** (only when `list --json` has `update`): 11.5px `muted`, bottom border, "<latest> available: <command>".
+3. **Problem line** (only when there are tasks and something failed): 11.5px in `blocked`, e.g. a `tasks.json` validation error.
+4. **Task rows**, scrolling (`overflow_y_scrollbar`), each 12px side padding, 9px vertical, bottom border:
    - Line 1: title (semibold, `foreground`; `muted` when paused, truncated) and, right-aligned, the last run status as a 7px dot plus the word, both in the status color.
    - Line 2: 11.5px `muted`: the trigger in words ("weekdays at 09:00", "Mondays at 08:00", "every 30 min", "hourly at :15", "monthly on day 1 at 17:00", "once on 2026-11-14 04:00", "on webhook", else "cron <expr>"), then " · <agent>" or " · <agent> · <model>".
    - Line 3: 11.5px `dim`: "next <when>" or "paused" or "no next run", then " · last #<n> <when>" or " · never ran". `<when>` is "today HH:MM", "Ddd HH:MM" within 6 days, else "YYYY-MM-DD HH:MM", local time.
    - Line 4: buttons, 11.5px, 1px `border` outline, 5px radius, hover `hover`: "Run now", "Disable"/"Enable", and "Show run" only while the last run's space is still open.
-4. **Empty state**, 12px `muted` text: with no `cli.json`, setup steps (install the `herdr-triggers` binary, run `herdr-triggers start` once); with no tasks, a pointer to `herdr-triggers tui` and the `schedule-local` skill; when the CLI can't run, "Can't run herdr-triggers: <error>".
+5. **Empty state**, 12px `muted` text: with no `cli.json`, setup steps (install the `herdr-triggers` binary, run `herdr-triggers mod install`); with no tasks, a pointer to `herdr-triggers tui` and the `schedule-local` skill; when the CLI can't run, "Can't run herdr-triggers: <error>".
 
 ## How it behaves
 
@@ -32,7 +33,7 @@ Top to bottom, in a 320px column docked right (`mod.json`: `place: "right"`, `si
 - `mods/triggers/main.js` (one `View`), `mod.json`, `icon.svg` (24px Lucide-style alarm clock, stroke `currentColor`).
 - `herdr`: `exec`, `home`, `readTextFile`, `run("space.select")`, `spaces()` (to know if the last run's space is open), `theme()`. `gpui-kit`: `View`, `div`, `svg`; `gpui-base`: `h_flex`, `v_flex`.
 - It reads `~/.config/herdr-triggers/cli.json` (`{ "argv": ["<path>/herdr-triggers"] }`, written by `herdr-triggers start`) and runs that argv plus:
-  - `list --json` → `{ tasks: [{ id, title, schedule, enabled, agent, model, next, last: { n, status, firedAt, space, terminal } | null }], error? }`
+  - `list --json` → `{ tasks: [{ id, title, schedule, enabled, agent, model, next, last: { n, status, firedAt, space, terminal } | null }], error?, update: { latest, command } | null }`
   - `status --json` → `{ state: "live", space, terminal } | { state: "stopped" }`
   - `run-now <id> --bg`, `enable <id>`, `disable <id>`, `start`.
 - Programs it runs: the `herdr-triggers` binary, which itself runs `herdr-app`, `hc`, the agents and `notify-send`.
