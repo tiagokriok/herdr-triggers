@@ -495,7 +495,26 @@ func buildForm(v *form, editing bool, taken func(string) bool, base string, quic
 		),
 		huh.NewGroup(
 			huh.NewNote().Title("Webhook URL").DescriptionFunc(hookNote, &v.ID),
+			huh.NewSelect[string]().Title("Signature").Description("also check the sender's HMAC-SHA256 signature of the body").Options(
+				huh.NewOption("none: the token in the url is enough", "none"),
+				huh.NewOption("github: X-Hub-Signature-256", "github"),
+				huh.NewOption("linear: Linear-Signature", "linear"),
+				huh.NewOption("custom: any header", "custom"),
+			).Value(&v.Signing),
 		).WithHideFunc(func() bool { return v.Trigger != "webhook" }),
+		huh.NewGroup(
+			huh.NewInput().Title("Signing secret").Description("the secret you set in the sender, 16+ characters").EchoMode(huh.EchoModePassword).Value(&v.SigSecret).Validate(func(s string) error {
+				if len(strings.TrimSpace(s)) < task.MinTokenLength {
+					return fmt.Errorf("at least %d characters", task.MinTokenLength)
+				}
+				return nil
+			}),
+		).WithHideFunc(func() bool { return v.Trigger != "webhook" || v.Signing == "none" }),
+		huh.NewGroup(
+			huh.NewInput().Title("Signature header").Value(&v.SigHeader).Validate(required("header")),
+			huh.NewSelect[string]().Title("Encoding").Options(huh.NewOptions("hex", "base64")...).Value(&v.SigEncoding),
+			huh.NewInput().Title("Prefix").Description("optional, e.g. sha256=").Value(&v.SigPrefix),
+		).WithHideFunc(func() bool { return v.Trigger != "webhook" || v.Signing != "custom" }),
 		huh.NewGroup(
 			huh.NewSelect[string]().Title("Agent").Options(huh.NewOptions("claude", "codex", "pi", "opencode", otherAgent)...).Value(&v.Agent),
 			huh.NewInput().Title("Model").Description("optional, passed as the agent's model flag").Value(&v.Model),

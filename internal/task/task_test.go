@@ -43,6 +43,21 @@ func TestOptionalFields(t *testing.T) {
 	}
 }
 
+func TestSignatureDefaultsAndPresets(t *testing.T) {
+	in := strings.Replace(valid, `{"type":"cron","expr":"0 9 * * 1-5"}`, `{"type":"webhook","token":"0123456789abcdef0123","signature":{"secret":"0123456789abcdef","header":"X-Sig"}}`, 1)
+	sig := mustParse(t, in).Tasks[0].Schedule.Signature
+	if sig == nil || sig.Encoding != "hex" || sig.Prefix != "" {
+		t.Fatalf("%+v", sig)
+	}
+	gh := SignaturePresets["github"]
+	if gh.Header != "X-Hub-Signature-256" || gh.Encoding != "hex" || gh.Prefix != "sha256=" {
+		t.Fatalf("github preset %+v", gh)
+	}
+	if l := SignaturePresets["linear"]; l.Header != "Linear-Signature" || l.Encoding != "hex" || l.Prefix != "" {
+		t.Fatalf("linear preset %+v", l)
+	}
+}
+
 func TestMissingFileShapeIsEmpty(t *testing.T) {
 	if len(mustParse(t, `{"tasks":[]}`).Tasks) != 0 {
 		t.Fatal("expected empty")
@@ -61,6 +76,10 @@ func TestRejects(t *testing.T) {
 		"type":        {strings.Replace(valid, `"cron","expr"`, `"weekly","expr"`, 1), "schedule type"},
 		"short token": {strings.Replace(valid, `{"type":"cron","expr":"0 9 * * 1-5"}`, `{"type":"webhook","token":"short"}`, 1), "token"},
 		"timeout":     {withTask(`"timeoutMinutes":-1`), "timeoutMinutes"},
+		"sig secret":  {strings.Replace(valid, `{"type":"cron","expr":"0 9 * * 1-5"}`, `{"type":"webhook","token":"0123456789abcdef0123","signature":{"secret":"short","header":"X-Sig"}}`, 1), "secret"},
+		"sig header":  {strings.Replace(valid, `{"type":"cron","expr":"0 9 * * 1-5"}`, `{"type":"webhook","token":"0123456789abcdef0123","signature":{"secret":"0123456789abcdef"}}`, 1), "header"},
+		"sig enc":     {strings.Replace(valid, `{"type":"cron","expr":"0 9 * * 1-5"}`, `{"type":"webhook","token":"0123456789abcdef0123","signature":{"secret":"0123456789abcdef","header":"X-Sig","encoding":"b32"}}`, 1), "encoding"},
+		"sig on cron": {strings.Replace(valid, `"expr":"0 9 * * 1-5"}`, `"expr":"0 9 * * 1-5","signature":{"secret":"0123456789abcdef","header":"X-Sig"}}`, 1), "signature"},
 		"title":       {strings.Replace(valid, `"Daily"`, `""`, 1), "title"},
 		"dup":         {`{"tasks":[` + valid[10:len(valid)-2] + `,` + valid[10:len(valid)-2] + `]}`, "duplicate"},
 	}

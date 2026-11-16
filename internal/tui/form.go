@@ -25,6 +25,21 @@ type form struct {
 	Model, AgentArgs       string
 	Timeout, CatchUp       string
 	Enabled                bool
+	Signing, SigSecret     string
+	SigHeader, SigEncoding string
+	SigPrefix              string
+}
+
+func signingOf(g *task.Signature) string {
+	if g == nil {
+		return "none"
+	}
+	for name, p := range task.SignaturePresets {
+		if g.Header == p.Header && g.Encoding == p.Encoding && g.Prefix == p.Prefix {
+			return name
+		}
+	}
+	return "custom"
 }
 
 func newToken() string {
@@ -59,6 +74,10 @@ func fromTask(t task.Task) form {
 	}
 	if t.CatchUpMinutes != nil {
 		f.CatchUp = strconv.Itoa(*t.CatchUpMinutes)
+	}
+	f.Signing, f.SigEncoding = signingOf(t.Schedule.Signature), "hex"
+	if g := t.Schedule.Signature; g != nil {
+		f.SigSecret, f.SigHeader, f.SigEncoding, f.SigPrefix = g.Secret, g.Header, g.Encoding, g.Prefix
 	}
 	return f
 }
@@ -97,6 +116,7 @@ func (f form) toTask() (task.Task, error) {
 		if t.Schedule.Token == "" {
 			t.Schedule.Token = newToken()
 		}
+		t.Schedule.Signature = f.signature()
 	}
 	timeout, err := optionalInt("timeout", f.Timeout)
 	if err != nil {
@@ -109,6 +129,18 @@ func (f form) toTask() (task.Task, error) {
 	}
 	t.CatchUpMinutes = &catchUp
 	return t, t.Validate()
+}
+
+func (f form) signature() *task.Signature {
+	switch f.Signing {
+	case "", "none":
+		return nil
+	case "custom":
+		return &task.Signature{Secret: strings.TrimSpace(f.SigSecret), Header: strings.TrimSpace(f.SigHeader), Encoding: f.SigEncoding, Prefix: strings.TrimSpace(f.SigPrefix)}
+	}
+	g := task.SignaturePresets[f.Signing]
+	g.Secret = strings.TrimSpace(f.SigSecret)
+	return &g
 }
 
 func preview(s task.Schedule, now time.Time) string {

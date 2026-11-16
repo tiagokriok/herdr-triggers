@@ -115,9 +115,9 @@ func TestRejections(t *testing.T) {
 		headers                  map[string]string
 		code                     int
 	}{
-		{"wrong token", "POST", "/hooks/alert", "", map[string]string{"Authorization": "Bearer nope"}, 401},
-		{"no token", "POST", "/hooks/alert", "", nil, 401},
-		{"wrong path token", "POST", "/hooks/alert/nope", "", bearer, 401},
+		{"wrong token", "POST", "/hooks/alert", "", map[string]string{"Authorization": "Bearer nope"}, 404},
+		{"no token", "POST", "/hooks/alert", "", nil, 404},
+		{"wrong path token", "POST", "/hooks/alert/nope", "", bearer, 404},
 		{"unknown", "POST", "/hooks/nope", "", bearer, 404},
 		{"disabled", "POST", "/hooks/off", "", bearer, 404},
 		{"not webhook", "POST", "/hooks/cron", "", bearer, 404},

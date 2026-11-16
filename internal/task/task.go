@@ -20,10 +20,38 @@ const (
 )
 
 type Schedule struct {
-	Type  string `json:"type"`
-	Expr  string `json:"expr,omitempty"`
-	RunAt string `json:"runAt,omitempty"`
-	Token string `json:"token,omitempty"`
+	Type      string     `json:"type"`
+	Expr      string     `json:"expr,omitempty"`
+	RunAt     string     `json:"runAt,omitempty"`
+	Token     string     `json:"token,omitempty"`
+	Signature *Signature `json:"signature,omitempty"`
+}
+
+type Signature struct {
+	Secret   string `json:"secret"`
+	Header   string `json:"header"`
+	Encoding string `json:"encoding,omitempty"`
+	Prefix   string `json:"prefix,omitempty"`
+}
+
+var SignaturePresets = map[string]Signature{
+	"github": {Header: "X-Hub-Signature-256", Encoding: "hex", Prefix: "sha256="},
+	"linear": {Header: "Linear-Signature", Encoding: "hex"},
+}
+
+func (g *Signature) validate() error {
+	if g.Encoding == "" {
+		g.Encoding = "hex"
+	}
+	switch {
+	case len(g.Secret) < MinTokenLength:
+		return fmt.Errorf("signature secret must have at least %d characters", MinTokenLength)
+	case strings.TrimSpace(g.Header) == "":
+		return errors.New("signature header is required")
+	case g.Encoding != "hex" && g.Encoding != "base64":
+		return errors.New("signature encoding must be hex or base64")
+	}
+	return nil
 }
 
 type Task struct {
@@ -65,6 +93,14 @@ func (t Task) CatchUp() time.Duration {
 }
 
 func (s Schedule) validate() error {
+	if s.Signature != nil {
+		if s.Type != "webhook" {
+			return errors.New("signature is only for webhook schedules")
+		}
+		if err := s.Signature.validate(); err != nil {
+			return err
+		}
+	}
 	switch s.Type {
 	case "cron":
 		return ValidateCron(s.Expr)

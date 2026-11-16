@@ -73,3 +73,42 @@ func TestPreview(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestFormSignature(t *testing.T) {
+	base := form{ID: "h", Title: "H", Prompt: "p", Cwd: "/w", Trigger: "webhook", Token: "0123456789abcdef0123", Agent: "claude", Enabled: true, CatchUp: "120"}
+
+	gh := base
+	gh.Signing, gh.SigSecret = "github", "whsec-0123456789abcdef"
+	got, err := gh.toTask()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := got.Schedule.Signature; s == nil || s.Header != "X-Hub-Signature-256" || s.Prefix != "sha256=" || s.Secret != gh.SigSecret {
+		t.Fatalf("github %+v", s)
+	}
+	if back := fromTask(got); back.Signing != "github" || back.SigSecret != gh.SigSecret {
+		t.Fatalf("github round trip %+v", back)
+	}
+
+	custom := base
+	custom.Signing, custom.SigSecret, custom.SigHeader, custom.SigEncoding = "custom", "whsec-0123456789abcdef", "X-Grafana-Sig", "base64"
+	got, err = custom.toTask()
+	if err != nil || got.Schedule.Signature.Header != "X-Grafana-Sig" || got.Schedule.Signature.Encoding != "base64" {
+		t.Fatalf("custom %+v %v", got.Schedule.Signature, err)
+	}
+	if back := fromTask(got); back.Signing != "custom" || back.SigHeader != "X-Grafana-Sig" {
+		t.Fatalf("custom round trip %+v", back)
+	}
+
+	none := base
+	none.Signing, none.SigSecret = "none", "ignored-0123456789"
+	if got, _ := none.toTask(); got.Schedule.Signature != nil {
+		t.Fatalf("none kept a signature %+v", got.Schedule.Signature)
+	}
+
+	short := base
+	short.Signing, short.SigSecret = "linear", "short"
+	if _, err := short.toTask(); err == nil {
+		t.Fatal("short secret accepted")
+	}
+}

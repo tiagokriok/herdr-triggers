@@ -1,7 +1,10 @@
 package webhook
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -45,6 +48,28 @@ func sameToken(a, b string) bool {
 	return subtle.ConstantTimeCompare(ha[:], hb[:]) == 1
 }
 
+func validSignature(g *task.Signature, header string, body []byte) bool {
+	got, ok := strings.CutPrefix(header, g.Prefix)
+	if !ok || got == "" {
+		return false
+	}
+	var sum []byte
+	var err error
+	if g.Encoding == "base64" {
+		sum, err = base64.StdEncoding.DecodeString(got)
+	} else {
+		sum, err = hex.DecodeString(got)
+	}
+	if err != nil {
+		return false
+	}
+	m := hmac.New(sha256.New, []byte(g.Secret))
+	m.Write(body)
+	return hmac.Equal(sum, m.Sum(nil))
+}
+
+func notFound(w http.ResponseWriter) { fail(w, http.StatusNotFound, "not found") }
+
 func findHook(tasks []task.Task, id string) (task.Task, bool) {
 	for _, t := range tasks {
 		if t.ID == id && t.Enabled && t.Schedule.Type == "webhook" {
@@ -70,7 +95,7 @@ func Handler(a *app.App, spawn func(func())) http.Handler {
 		}
 		t, ok := findHook(f.Tasks, id)
 		if !ok {
-			fail(w, http.StatusNotFound, "no enabled webhook task "+id)
+			notFound(w)
 			return
 		}
 		record := func(bytes int, outcome string, n int) {
@@ -79,7 +104,7 @@ func Handler(a *app.App, spawn func(func())) http.Handler {
 		}
 		if !sameToken(tokenOf(r), t.Schedule.Token) {
 			record(0, "unauthorized", 0)
-			fail(w, http.StatusUnauthorized, "bad token")
+			notFound(w)
 			return
 		}
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
@@ -91,6 +116,11 @@ func Handler(a *app.App, spawn func(func())) http.Handler {
 		}
 		if err != nil {
 			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if g := t.Schedule.Signature; g != nil && !validSignature(g, r.Header.Get(g.Header), body) {
+			record(len(body), "bad_signature", 0)
+			notFound(w)
 			return
 		}
 		run, start, err := a.Begin(t, string(body))
