@@ -43,10 +43,11 @@ func (g *Signature) validate() error {
 	if g.Encoding == "" {
 		g.Encoding = "hex"
 	}
+	g.Header = strings.TrimSpace(g.Header)
 	switch {
 	case len(g.Secret) < MinTokenLength:
 		return fmt.Errorf("signature secret must have at least %d characters", MinTokenLength)
-	case strings.TrimSpace(g.Header) == "":
+	case g.Header == "":
 		return errors.New("signature header is required")
 	case g.Encoding != "hex" && g.Encoding != "base64":
 		return errors.New("signature encoding must be hex or base64")

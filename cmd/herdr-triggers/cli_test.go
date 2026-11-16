@@ -51,7 +51,9 @@ func TestKeepCommand(t *testing.T) {
 	if out := must(t, "keep"); !strings.Contains(out, "50") {
 		t.Fatalf("default keep: %q", out)
 	}
-	must(t, "keep", "10")
+	if out := must(t, "keep", "10"); !strings.Contains(out, "restart") {
+		t.Fatalf("no restart hint: %q", out)
+	}
 	if out := must(t, "keep"); !strings.Contains(out, "10") {
 		t.Fatalf("keep after set: %q", out)
 	}
@@ -71,7 +73,9 @@ func TestUpdatesCommand(t *testing.T) {
 	if out := must(t, "updates"); !strings.Contains(out, "on") {
 		t.Fatalf("default: %q", out)
 	}
-	must(t, "updates", "off")
+	if out := must(t, "updates", "off"); !strings.Contains(out, "restart") {
+		t.Fatalf("no restart hint: %q", out)
+	}
 	if out := must(t, "updates"); !strings.Contains(out, "off") {
 		t.Fatalf("after off: %q", out)
 	}

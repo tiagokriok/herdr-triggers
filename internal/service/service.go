@@ -15,7 +15,7 @@ const (
 	label    = "dev.herdr.triggers"
 )
 
-var forwarded = []string{"PATH", "CLAUDE_CONFIG_DIR", "TRIGGERS_ADDR", "TRIGGERS_HC", "TRIGGERS_APP", "TRIGGERS_HERDR"}
+var forwarded = []string{"PATH", "CLAUDE_CONFIG_DIR", "TRIGGERS_ADDR", "TRIGGERS_HC", "TRIGGERS_APP", "TRIGGERS_HERDR", "TRIGGERS_NO_UPDATE_CHECK"}
 
 type Deps struct {
 	GOOS string

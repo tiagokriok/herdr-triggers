@@ -46,9 +46,14 @@ func TestSignatureGitHub(t *testing.T) {
 	if r := e.do("POST", "/hooks/signed/nope", body, good); r.Code != 404 {
 		t.Fatalf("signed but wrong token: %d", r.Code)
 	}
+	e.wg.Wait()
 	ds, _ := e.db.Deliveries("signed", 10)
-	if ds[0].Outcome != "unauthorized" || ds[1].Outcome != "bad_signature" || ds[len(ds)-1].Outcome != "accepted" {
-		t.Fatalf("%+v", ds)
+	count := map[string]int{}
+	for _, d := range ds {
+		count[d.Outcome]++
+	}
+	if count["accepted"] != 1 || count["bad_signature"] != 4 || count["unauthorized"] != 1 {
+		t.Fatalf("%v", count)
 	}
 }
 

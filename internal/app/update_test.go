@@ -12,7 +12,18 @@ func TestStepChecksUpdatesOncePerDay(t *testing.T) {
 	e := newEnv(t).at("2026-11-15T12:00:00Z")
 	e.write(cronJSON)
 	fetches := 0
+	release := make(chan struct{})
 	e.app.Version, e.app.UpdateCheck = "0.1.0", true
+	e.app.FetchLatest = func() (string, error) { <-release; fetches++; return "v0.2.0", nil }
+	done := make(chan struct{})
+	go func() { e.app.Step(nil); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Step waited for the release fetch")
+	}
+	close(release)
+	e.app.updates.Wait()
 	e.app.FetchLatest = func() (string, error) { fetches++; return "v0.2.0", nil }
 	s := e.step(nil)
 	s = e.step(s)

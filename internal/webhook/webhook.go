@@ -103,7 +103,7 @@ func Handler(a *app.App, spawn func(func())) http.Handler {
 			a.Log("webhook " + id + " " + outcome)
 		}
 		if !sameToken(tokenOf(r), t.Schedule.Token) {
-			record(0, "unauthorized", 0)
+			spawn(func() { record(0, "unauthorized", 0) })
 			notFound(w)
 			return
 		}
@@ -119,7 +119,7 @@ func Handler(a *app.App, spawn func(func())) http.Handler {
 			return
 		}
 		if g := t.Schedule.Signature; g != nil && !validSignature(g, r.Header.Get(g.Header), body) {
-			record(len(body), "bad_signature", 0)
+			spawn(func() { record(len(body), "bad_signature", 0) })
 			notFound(w)
 			return
 		}

@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tiagokriok/herdr-triggers/internal/dispatch"
@@ -29,6 +32,8 @@ type App struct {
 	Version     string
 	UpdateCheck bool
 	FetchLatest func() (string, error)
+	updates     sync.WaitGroup
+	checking    atomic.Bool
 }
 
 var (
@@ -125,18 +130,25 @@ func (a *App) Step(prev schedule.State) (schedule.State, []<-chan store.Run) {
 }
 
 func (a *App) checkUpdate() {
-	if !a.UpdateCheck || a.FetchLatest == nil || !update.Due(a.DB, a.Dispatch.Now()) {
+	if !a.UpdateCheck || a.FetchLatest == nil || !update.Due(a.DB, a.Dispatch.Now()) || !a.checking.CompareAndSwap(false, true) {
 		return
 	}
-	latest, err := a.FetchLatest()
-	if err != nil {
-		a.Log("update check: " + err.Error())
-		latest = ""
-	}
-	update.Record(a.DB, a.Dispatch.Now(), latest)
+	fetch := a.FetchLatest
+	a.updates.Go(func() {
+		defer a.checking.Store(false)
+		latest, err := fetch()
+		if err != nil {
+			a.Log("update check: " + err.Error())
+			latest = ""
+		}
+		update.Record(a.DB, a.Dispatch.Now(), latest)
+	})
 }
 
 func (a *App) forget(tasks []task.Task) {
+	if _, err := os.Stat(a.Tasks); err != nil {
+		return
+	}
 	ids := make([]string, 0, len(tasks))
 	for _, t := range tasks {
 		ids = append(ids, t.ID)

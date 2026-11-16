@@ -187,6 +187,7 @@ func run(args []string) error {
 			if err := config.Save(p.Config, cfg); err != nil {
 				return err
 			}
+			defer fmt.Println("saved; restart the scheduler to apply")
 		}
 		if cfg.Keep() == 0 {
 			fmt.Println("keep: unlimited runs and deliveries per task")
@@ -209,6 +210,7 @@ func run(args []string) error {
 			if err := config.Save(p.Config, cfg); err != nil {
 				return err
 			}
+			defer fmt.Println("saved; restart the scheduler to apply")
 		}
 		state := "on"
 		if !cfg.Updates() {
@@ -350,10 +352,7 @@ func run(args []string) error {
 		if service.Installed(sd) {
 			st.Mode = "service"
 		}
-		if a, err := runtime.NewApp(p); err == nil {
-			st.Update = runtime.UpdateInfo(a)
-			a.DB.Close()
-		}
+		st.Update = runtime.UpdateFor(db, cfg)
 		if has(rest, "--json") {
 			return printJSON(st)
 		}

@@ -45,8 +45,8 @@ func TestOptionalFields(t *testing.T) {
 
 func TestSignatureDefaultsAndPresets(t *testing.T) {
 	in := strings.Replace(valid, `{"type":"cron","expr":"0 9 * * 1-5"}`, `{"type":"webhook","token":"0123456789abcdef0123","signature":{"secret":"0123456789abcdef","header":"X-Sig"}}`, 1)
-	sig := mustParse(t, in).Tasks[0].Schedule.Signature
-	if sig == nil || sig.Encoding != "hex" || sig.Prefix != "" {
+	sig := mustParse(t, strings.Replace(in, `"X-Sig"`, `" X-Sig "`, 1)).Tasks[0].Schedule.Signature
+	if sig == nil || sig.Encoding != "hex" || sig.Prefix != "" || sig.Header != "X-Sig" {
 		t.Fatalf("%+v", sig)
 	}
 	gh := SignaturePresets["github"]

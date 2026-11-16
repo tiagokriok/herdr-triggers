@@ -86,6 +86,17 @@ func UpdateInfo(a *app.App) *update.Info {
 	if !a.UpdateCheck {
 		return nil
 	}
+	return available(a.DB, a.Version)
+}
+
+func UpdateFor(db *store.DB, cfg config.Config) *update.Info {
+	if !update.Enabled(cfg.Updates(), Version, os.Getenv) {
+		return nil
+	}
+	return available(db, Version)
+}
+
+func available(db *store.DB, version string) *update.Info {
 	exe, err := os.Executable()
 	if err != nil {
 		return nil
@@ -93,7 +104,7 @@ func UpdateInfo(a *app.App) *update.Info {
 	if real, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = real
 	}
-	return update.Available(a.DB, a.Version, exe, os.Getenv)
+	return update.Available(db, version, exe, os.Getenv)
 }
 
 func fetchLatest() (string, error) {

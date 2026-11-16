@@ -135,8 +135,13 @@ func TestRejections(t *testing.T) {
 	if len(e.prompts) != 0 {
 		t.Fatal(e.prompts)
 	}
+	e.wg.Wait()
 	ds, _ := e.db.Deliveries("alert", 10)
-	if len(ds) != 4 || ds[0].Outcome != "too_large" || ds[3].Outcome != "unauthorized" {
+	count := map[string]int{}
+	for _, d := range ds {
+		count[d.Outcome]++
+	}
+	if len(ds) != 4 || count["too_large"] != 1 || count["unauthorized"] != 3 {
 		t.Fatalf("%+v", ds)
 	}
 }

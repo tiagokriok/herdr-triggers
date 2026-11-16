@@ -97,6 +97,20 @@ func TestModInstallKeys(t *testing.T) {
 	}
 }
 
+func TestModUninstallBindingLast(t *testing.T) {
+	s := newSandbox(t)
+	(&fakeExec{}).install(t)
+	os.MkdirAll(filepath.Dir(s.keysFile()), 0o755)
+	os.WriteFile(s.keysFile(), []byte(`{"global":{"ctrl-shift-t":"tab.new"}}`), 0o644)
+	must(t, "mod", "install", "--keys")
+	os.WriteFile(s.keysFile(), []byte("{\n  \"global\": {\n    \"ctrl-shift-t\": \"tab.new\",\n    \"ctrl-shift-y\": \"mod.open:triggers\"\n  }\n}\n"), 0o644)
+	must(t, "mod", "uninstall")
+	keys := readKeys(t, s)
+	if _, ok := keys["global"]["ctrl-shift-y"]; ok || keys["global"]["ctrl-shift-t"] != "tab.new" {
+		t.Fatalf("%v", keys)
+	}
+}
+
 func TestModInstallKeyBusy(t *testing.T) {
 	s := newSandbox(t)
 	(&fakeExec{}).install(t)

@@ -14,7 +14,7 @@ func fake(goos string, t *testing.T) (Deps, *[][]string) {
 	var calls [][]string
 	return Deps{
 		GOOS: goos, Home: t.TempDir(), UID: 501, Exe: "/opt/bin/herdr-triggers",
-		Env:  map[string]string{"PATH": "/opt/bin:/usr/bin", "CLAUDE_CONFIG_DIR": "/c"},
+		Env:  map[string]string{"PATH": "/opt/bin:/usr/bin", "CLAUDE_CONFIG_DIR": "/c", "TRIGGERS_NO_UPDATE_CHECK": "1"},
 		Exec: func(argv []string) dispatch.Result { calls = append(calls, argv); return dispatch.Result{} },
 	}, &calls
 }
@@ -29,7 +29,7 @@ func TestLinux(t *testing.T) {
 		t.Fatal(msg, err)
 	}
 	unit, _ := os.ReadFile(filepath.Join(d.Home, ".config/systemd/user/herdr-triggers.service"))
-	for _, want := range []string{"ExecStart=/opt/bin/herdr-triggers serve", "Restart=on-failure", "Environment=\"PATH=/opt/bin:/usr/bin\"", "Environment=\"CLAUDE_CONFIG_DIR=/c\"", "WantedBy=default.target"} {
+	for _, want := range []string{"ExecStart=/opt/bin/herdr-triggers serve", "Restart=on-failure", "Environment=\"PATH=/opt/bin:/usr/bin\"", "Environment=\"CLAUDE_CONFIG_DIR=/c\"", "Environment=\"TRIGGERS_NO_UPDATE_CHECK=1\"", "WantedBy=default.target"} {
 		if !strings.Contains(string(unit), want) {
 			t.Errorf("missing %q in\n%s", want, unit)
 		}

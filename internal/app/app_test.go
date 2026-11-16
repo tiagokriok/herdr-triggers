@@ -97,6 +97,7 @@ func (e *env) step(prev schedule.State) schedule.State {
 	for _, r := range runs {
 		<-r
 	}
+	e.app.updates.Wait()
 	return s
 }
 

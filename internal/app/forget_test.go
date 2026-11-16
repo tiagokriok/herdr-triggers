@@ -19,6 +19,12 @@ func TestStepForgetsRemovedTasks(t *testing.T) {
 	}
 
 	e.app.DB.Reserve("gone", e.now, "done")
+	os.Remove(e.tasks)
+	s = e.step(s)
+	if len(e.runs("gone")) != 1 || len(e.runs("daily")) != 1 {
+		t.Fatal("a missing tasks.json deleted history")
+	}
+
 	os.WriteFile(e.tasks, []byte(`{"tasks":[ broken`), 0o644)
 	e.step(s)
 	if len(e.runs("gone")) != 1 || len(e.runs("daily")) != 1 {

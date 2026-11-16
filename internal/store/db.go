@@ -11,7 +11,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-var ActiveStatuses = []string{"starting", "working", "blocked"}
+var (
+	ActiveStatuses = []string{"starting", "working", "blocked"}
+	activeSQL      = "('" + strings.Join(ActiveStatuses, "', '") + "')"
+)
 
 type Run struct {
 	TaskID    string     `json:"taskId"`
@@ -114,7 +117,7 @@ func (d *DB) Reserve(taskID string, firedAt time.Time, status string) (Run, erro
 		return Run{}, err
 	}
 	if d.Keep > 0 {
-		if _, err := tx.Exec(`DELETE FROM runs WHERE task_id = ? AND status NOT IN ('starting', 'working', 'blocked')
+		if _, err := tx.Exec(`DELETE FROM runs WHERE task_id = ? AND status NOT IN `+activeSQL+`
 AND n NOT IN (SELECT n FROM runs WHERE task_id = ? ORDER BY n DESC LIMIT ?)`, taskID, taskID, d.Keep); err != nil {
 			return Run{}, err
 		}
@@ -179,7 +182,7 @@ func (d *DB) Last(taskID string) (*Run, error) {
 }
 
 func (d *DB) Active() ([]Run, error) {
-	return scanRuns(d.sql.Query(`SELECT ` + runCols + ` FROM runs WHERE status IN ('starting', 'working', 'blocked') ORDER BY fired_at`))
+	return scanRuns(d.sql.Query(`SELECT ` + runCols + ` FROM runs WHERE status IN ` + activeSQL + ` ORDER BY fired_at`))
 }
 
 func (d *DB) HasRun(taskID string) (bool, error) {
@@ -216,7 +219,7 @@ func (d *DB) ForgetExcept(ids []string) error {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM runs WHERE task_id NOT IN (SELECT value FROM json_each(?)) AND status NOT IN ('starting', 'working', 'blocked')`, string(keep)); err != nil {
+	if _, err := tx.Exec(`DELETE FROM runs WHERE task_id NOT IN (SELECT value FROM json_each(?)) AND status NOT IN `+activeSQL, string(keep)); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`DELETE FROM deliveries WHERE task_id NOT IN (SELECT value FROM json_each(?))`, string(keep)); err != nil {

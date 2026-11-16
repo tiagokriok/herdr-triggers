@@ -24,7 +24,9 @@ const (
 var (
 	ErrNotManaged = errors.New("the Triggers panel was not installed by herdr-triggers")
 	globalOpen    = regexp.MustCompile(`"global"\s*:\s*\{`)
-	ourBinding    = regexp.MustCompile(`\s*"` + regexp.QuoteMeta(Key) + `"\s*:\s*"` + regexp.QuoteMeta(Action) + `"\s*,?`)
+	bindingPat    = `"` + regexp.QuoteMeta(Key) + `"\s*:\s*"` + regexp.QuoteMeta(Action) + `"`
+	bindingFirst  = regexp.MustCompile(`\s*` + bindingPat + `\s*,?`)
+	bindingLast   = regexp.MustCompile(`\s*,\s*` + bindingPat)
 )
 
 type marker struct {
@@ -72,16 +74,22 @@ func copyPanel(assets fs.FS, home string, m marker) error {
 	if err == nil {
 		err = store.WriteJSON(filepath.Join(tmp, markerName), m)
 	}
-	if err == nil {
-		err = os.RemoveAll(dir)
-	}
-	if err == nil {
-		err = os.Rename(tmp, dir)
-	}
 	if err != nil {
 		os.RemoveAll(tmp)
+		return err
 	}
-	return err
+	old := dir + ".old"
+	os.RemoveAll(old)
+	if err := os.Rename(dir, old); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		os.RemoveAll(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, dir); err != nil {
+		os.Rename(old, dir)
+		os.RemoveAll(tmp)
+		return err
+	}
+	return os.RemoveAll(old)
 }
 
 func Install(assets fs.FS, home string) error {
@@ -159,14 +167,16 @@ func unbind(home string) error {
 	if err != nil {
 		return nil
 	}
-	edited := ourBinding.ReplaceAllString(string(data), "")
-	if edited == string(data) {
-		return nil
+	for _, pattern := range []*regexp.Regexp{bindingFirst, bindingLast} {
+		edited := pattern.ReplaceAllString(string(data), "")
+		if edited == string(data) {
+			return nil
+		}
+		if json.Valid([]byte(edited)) {
+			return os.WriteFile(file, []byte(edited), 0o644)
+		}
 	}
-	if !json.Valid([]byte(edited)) {
-		return errors.New("could not edit keys.json safely; remove " + Binding + " by hand")
-	}
-	return os.WriteFile(file, []byte(edited), 0o644)
+	return errors.New("could not edit keys.json safely; remove " + Binding + " by hand")
 }
 
 func Uninstall(home string) error {
